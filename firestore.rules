@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/adminAccess/$(request.auth.uid));
+    }
+
+    function isSuperAdmin() {
+      return isAdmin() &&
+        get(/databases/$(database)/documents/adminAccess/$(request.auth.uid)).data.role == 'super_admin';
+    }
+
+    // ── STUDENTS ──
+    match /students/{studentId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      // Students can update their own registration (email, registeredStatus only)
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['email', 'registeredStatus', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ── ELECTIONS ──
+    match /elections/{electionId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── POSITIONS ──
+    match /positions/{positionId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── CANDIDATES ──
+    match /candidates/{candidateId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── VOTES ──
+    match /votes/{voteId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.candidateId is string
+        && request.resource.data.electionId is string
+        && request.resource.data.positionId is string
+        && request.resource.data.studentId is string;
+      allow update, delete: if false;
+    }
+
+    // ── VOTE LOCKS ──
+    match /voteLocks/{lockId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── ADMIN USERS ──
+    match /admin_users/{adminDoc} {
+      allow read: if isSignedIn();
+      allow create, write, delete: if isSuperAdmin();
+    }
+
+    // ── ADMIN ACCESS MARKERS ──
+    // These are auto-created by AuthContext on first login when the user
+    // is already verified as an admin via the admin_users collection.
+    // Rules allow self-creation because the client verifies admin_users first.
+    match /adminAccess/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if request.auth.uid == userId;
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── AUDIT LOGS ──
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ── AUTH CODES ──
+    match /authCodes/{codeId} {
+      allow read: if isAdmin();
+      allow create: if isSuperAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── RATE LIMITS ──
+    match /rateLimits/{rateLimitId} {
+      allow read: if true;
+      allow create: if request.resource.data.attempts is number
+        && request.resource.data.attempts <= 10;
+      allow update: if request.resource.data.attempts is number;
+      allow delete: if isAdmin();
+    }
+
+    // ── DEVICE BINDINGS ──
+    match /deviceBindings/{signature} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.studentEmail is string
+        && request.resource.data.studentId is string;
+      allow update: if isSignedIn()
+        && resource.data.studentEmail == request.resource.data.studentEmail;
+      allow delete: if isAdmin();
+    }
+  }
+}
