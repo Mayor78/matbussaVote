@@ -43,7 +43,7 @@ const StudentRegistration = () => {
         const data = doc.data();
         const matric = data.matricNumber || data.matric_number || '';
         const lvl = data.level || '';
-        if (matric === matricNumber && lvl === level) {
+        if (matric.toLowerCase() === matricNumber.toLowerCase() && lvl === level) {
           foundStudent = { id: doc.id, ...data };
         }
       });

@@ -65,10 +65,49 @@ input, select, textarea, button {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-/* Focus ring improvement */
-input:focus, select:focus, textarea:focus {
+
+
+
+/* Prevent iOS zoom on input focus */
+input, 
+textarea, 
+select {
+  font-size: 16px !important;
+}
+
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Improve mobile touch experience */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better input styling on iOS */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+textarea,
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 12px;
+}
+
+/* Remove default iOS input shadow */
+input:focus,
+textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 /* Tap highlight on mobile */

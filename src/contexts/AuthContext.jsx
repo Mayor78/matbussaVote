@@ -186,8 +186,13 @@ export const AuthProvider = ({ children }) => {
         allStudents.forEach(doc => {
           const data = doc.data();
           const matric = data.matricNumber || data.matric_number || '';
-          if (matric === identifier) foundStudent = data;
+          if (matric.toLowerCase() === identifier.toLowerCase()) foundStudent = data;
         });
+
+        if (!foundStudent && import.meta.env.DEV) {
+          console.log('[Login] Matric lookup failed. Input:', identifier.toLowerCase());
+          console.log('[Login] Available matrics:', allStudents.docs.map(d => (d.data().matricNumber || d.data().matric_number || '').toLowerCase()));
+        }
 
         if (!foundStudent) {
           toast.error('Student not found. Check your matric number.');
@@ -263,7 +268,7 @@ export const AuthProvider = ({ children }) => {
       allStudents.forEach(doc => {
         const data = doc.data();
         const matric = data.matricNumber || data.matric_number || '';
-        if (matric === studentInfo.matricNumber) studentDocId = doc.id;
+        if (matric.toLowerCase() === studentInfo.matricNumber.toLowerCase()) studentDocId = doc.id;
       });
 
       if (studentDocId) {
