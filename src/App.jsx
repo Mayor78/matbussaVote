@@ -10,6 +10,7 @@ import AdminLayout from './layouts/AdminLayout';
 
 import Login from './pages/Login';
 import StudentRegistration from './pages/StudentRegistration';
+import ForgotPassword from './pages/ForgotPassword';
 
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
 const VotingPage = lazy(() => import('./pages/VotingPage'));
@@ -52,6 +53,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<StudentRegistration />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             
             <Route path="/student" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
               <Route index element={<Suspense fallback={<PageLoader />}><StudentDashboard /></Suspense>} />

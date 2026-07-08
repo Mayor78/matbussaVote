@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Shield, Tag, BarChart3, Vote, AlertCircle } from 'lucide-react';
+import { Calendar, Users, Shield, Tag, BarChart3, Vote, AlertCircle, Clock } from 'lucide-react';
 import Card from '../../components/Card';
 import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { CountdownTimer } from '../../components/CountdownTimer';
 
 const statusBadges = {
   draft: 'bg-gray-100 text-gray-800 border-gray-200',
@@ -78,6 +79,9 @@ export const ElectionOverview = ({ election, positions = [], candidates = [] }) 
           <div className="space-y-3">
             <div className="flex items-start gap-2"><Calendar className="w-4 h-4 text-gray-400 mt-0.5" /><div><p className="text-xs text-gray-500">Start Date</p><p className="text-sm font-semibold">{start ? new Date(start).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Not Set'}</p></div></div>
             <div className="flex items-start gap-2"><Calendar className="w-4 h-4 text-gray-400 mt-0.5" /><div><p className="text-xs text-gray-500">End Date</p><p className="text-sm font-semibold">{end ? new Date(end).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Not Set'}</p></div></div>
+            {election.status === 'open' && election.closesAt && (
+              <div className="flex items-start gap-2"><Clock className="w-4 h-4 text-blue-500 mt-0.5" /><div><p className="text-xs text-gray-500">Time Remaining</p><CountdownTimer closesAt={election.closesAt} /></div></div>
+            )}
           </div>
         </Card>
       </div>

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import logo from '../assets/IMG_5038.jpeg'; 
 import { Eye, EyeOff, UserCheck, ArrowLeft, ArrowRight, Mail } from 'lucide-react';
 import { studentRegistrationStep1Schema, studentRegistrationStep2Schema } from '../utils/schemas';
 import { getUserFriendlyError } from '../utils/errors';
@@ -114,7 +115,7 @@ const StudentRegistration = () => {
         <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-primary-100 rounded-full mb-3">
-              <UserCheck className="w-8 h-8 sm:w-10 sm:h-10 text-primary-600" />
+              <img src={logo} alt="Logo" className='w-12 h-12 sm:w-18 sm:h-18 rounded-full'/>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Student Registration</h1>
             <p className="text-gray-600 text-sm mt-1">Register for departmental elections</p>

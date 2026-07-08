@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, getCountFromServer, updateDoc, doc, addDoc } from 'firebase/firestore';
@@ -93,7 +93,7 @@ const AdminDashboard = () => {
   const [pendingElectionId, setPendingElectionId] = useState(null);
 
   const { register, handleSubmit, reset, setError, clearErrors, formState: { errors } } = useForm({
-    defaultValues: { title: '', description: '', academicSession: '', startDate: '', endDate: '' },
+    defaultValues: { title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 },
   });
 
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -123,6 +123,31 @@ const AdminDashboard = () => {
     onError: (error) => toast.error(getUserFriendlyError(error)),
   });
 
+  useEffect(() => {
+    const checkExpired = async () => {
+      try {
+        const openSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'open')));
+        const now = Date.now();
+        for (const d of openSnap.docs) {
+          const data = d.data();
+          if (data.closesAt && now > new Date(data.closesAt).getTime()) {
+            await updateDoc(doc(db, 'elections', d.id), {
+              status: 'closed',
+              updatedAt: new Date().toISOString(),
+            });
+            queryClient.invalidateQueries({ queryKey: ['adminElections'] });
+            queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+            console.log(`[AutoClose] Election ${d.id} auto-closed`);
+          }
+        }
+      } catch { /* auto-close is best-effort */ }
+    };
+
+    const interval = setInterval(checkExpired, 30000);
+    checkExpired();
+    return () => clearInterval(interval);
+  }, [queryClient]);
+
   const handleElectionAction = (electionId, action) => {
     if (action === 'activate') {
       statusMutation.mutate({ electionId, action });
@@ -151,13 +176,15 @@ const AdminDashboard = () => {
         academicSession: result.data.academicSession,
         startDate: result.data.startDate,
         endDate: result.data.endDate,
+        durationHours: result.data.durationHours || 24,
+        closesAt: null,
         status: 'draft',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
       toast.success('Election created!');
       setShowCreateModal(false);
-      reset({ title: '', description: '', academicSession: '', startDate: '', endDate: '' });
+      reset({ title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 });
       queryClient.invalidateQueries({ queryKey: ['adminElections'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
     } catch (error) {
@@ -273,6 +300,19 @@ const AdminDashboard = () => {
               <div className="grid grid-cols-2 gap-3">
                 <input type="date" {...register('startDate')} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 <input type="date" {...register('endDate')} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Duration (auto-close after)</label>
+                <select {...register('durationHours')} className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="1">1 hour</option>
+                  <option value="3">3 hours</option>
+                  <option value="6">6 hours</option>
+                  <option value="12">12 hours</option>
+                  <option value="24">24 hours</option>
+                  <option value="48">48 hours</option>
+                  <option value="72">72 hours</option>
+                  <option value="168">168 hours (1 week)</option>
+                </select>
               </div>
               <button type="submit" disabled={submitting} className="w-full bg-primary-600 text-white py-2.5 rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
                 {submitting ? 'Creating...' : 'Create Election'}

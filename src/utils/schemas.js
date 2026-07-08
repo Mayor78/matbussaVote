@@ -16,6 +16,7 @@ export const electionSchema = z.object({
   academicSession: z.string().min(1, 'Academic session is required').max(50).transform(stripTags),
   startDate: z.string().optional().default(''),
   endDate: z.string().optional().default(''),
+  durationHours: z.coerce.number().int().min(1).max(720).default(24),
 });
 
 export const positionSchema = z.object({

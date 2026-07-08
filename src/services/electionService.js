@@ -27,6 +27,8 @@ export const electionService = {
       electionYear: data.electionYear || data.election_year || new Date().getFullYear().toString(),
       startDate: data.startDate || data.start_date || '',
       endDate: data.endDate || data.end_date || '',
+      durationHours: data.durationHours || 24,
+      closesAt: null,
       status: 'draft',
       createdAt: now,
       updatedAt: now,
@@ -44,6 +46,7 @@ export const electionService = {
       ...(data.electionYear !== undefined && { electionYear: data.electionYear }),
       ...(data.startDate !== undefined && { startDate: data.startDate }),
       ...(data.endDate !== undefined && { endDate: data.endDate }),
+      ...(data.durationHours !== undefined && { durationHours: data.durationHours }),
       updatedAt: new Date().toISOString(),
     };
     await updateDoc(docRef, updateData);
@@ -57,10 +60,24 @@ export const electionService = {
 
   async updateStatus(id, status) {
     const docRef = doc(db, 'elections', id);
-    await updateDoc(docRef, { 
-      status, 
-      updatedAt: new Date().toISOString() 
-    });
+    const updateFields = {
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (status === 'open') {
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const durationHours = snap.data().durationHours || 24;
+        updateFields.closesAt = new Date(Date.now() + durationHours * 3600000).toISOString();
+      }
+    }
+
+    if (status === 'closed') {
+      updateFields.closesAt = new Date().toISOString();
+    }
+
+    await updateDoc(docRef, updateFields);
     return { id, status };
   },
 

@@ -3,6 +3,7 @@ import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { LogOut, User, Vote, Home, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import logo from '../assets/IMG_5038.jpeg'; // Adjust the path to your logo image
 
 const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -15,13 +16,14 @@ const MainLayout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100">
+    <div className="min-h-screen bg-linear-to-br from-primary-50 to-primary-100">
       <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
         <div className="mx-auto px-3 sm:px-4">
           <div className="flex justify-between items-center h-14 sm:h-16">
             <Link to="/student" className="flex items-center gap-2 flex-shrink-0">
-              <Vote className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
-              <span className="font-bold text-lg sm:text-xl text-gray-900">DeptElection</span>
+        
+              <img src={logo} alt="Logo" className='w-20 h-20 rounded-full'/>
+              <span className="font-bold text-lg sm:text-xl text-gray-900">MatBussa</span>
             </Link>
 
             {/* Desktop nav */}

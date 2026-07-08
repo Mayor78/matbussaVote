@@ -3,12 +3,13 @@ import { auth, db } from '../lib/firebase';
 import { collection, query, where, getDocs, runTransaction, doc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight } from 'lucide-react';
+import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, Clock } from 'lucide-react';
 import Modal from '../components/Modal';
 import Button from '../components/Button';
 import { getUserFriendlyError } from '../utils/errors';
 import { auditService } from '../services/auditService';
 import { generateDeviceSignature } from '../utils/deviceFingerprint';
+import { CountdownBanner, useCountdown } from '../components/CountdownTimer';
 
 const generateVoteHash = async (electionId, positionId, studentId) => {
   const payload = `${electionId}:${positionId}:${studentId}:${Date.now()}`;
@@ -118,6 +119,21 @@ const VotingPage = () => {
 
   const castVote = async (positionId, candidateId) => {
     if (!student || !selectedElection || voting) return;
+
+    if (selectedElection.closesAt && Date.now() > new Date(selectedElection.closesAt).getTime()) {
+      toast.error('This election has ended. Voting is closed.');
+      try {
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('../lib/firebase');
+        await updateDoc(doc(db, 'elections', selectedElection.id), {
+          status: 'closed',
+          updatedAt: new Date().toISOString(),
+        });
+        setSelectedElection(null);
+      } catch {}
+      return;
+    }
+
     setVoting(true);
     setMyVotes(prev => ({ ...prev, [positionId]: 'processing' }));
 
@@ -274,6 +290,10 @@ const VotingPage = () => {
               {selectedElection.academicSession || selectedElection.academic_session || ''}
             </p>
           </div>
+
+          {selectedElection.closesAt && (
+            <CountdownBanner closesAt={selectedElection.closesAt} />
+          )}
 
           {/* Progress bar */}
           <div className="bg-white rounded-xl shadow-sm border p-4">

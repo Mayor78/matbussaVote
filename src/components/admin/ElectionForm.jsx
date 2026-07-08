@@ -11,7 +11,7 @@ export const ElectionForm = ({ election = null, onSuccess, onCancel }) => {
   const [loading, setLoading] = useState(false);
 
   const { register, handleSubmit, reset, setError, clearErrors, formState: { errors } } = useForm({
-    defaultValues: { title: '', description: '', academicSession: '', startDate: '', endDate: '' },
+    defaultValues: { title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 },
   });
 
   useEffect(() => {
@@ -22,9 +22,10 @@ export const ElectionForm = ({ election = null, onSuccess, onCancel }) => {
         academicSession: election.academicSession || election.academic_session || '',
         startDate: election.startDate || election.start_date || '',
         endDate: election.endDate || election.end_date || '',
+        durationHours: election.durationHours || 24,
       });
     } else {
-      reset({ title: '', description: '', academicSession: '', startDate: '', endDate: '' });
+      reset({ title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 });
     }
   }, [election, reset]);
 
@@ -79,6 +80,21 @@ export const ElectionForm = ({ election = null, onSuccess, onCancel }) => {
           <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
           <input type="date" {...register('endDate')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Hours)</label>
+        <select {...register('durationHours')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+          <option value="1">1 hour</option>
+          <option value="2">2 hours</option>
+          <option value="3">3 hours</option>
+          <option value="6">6 hours</option>
+          <option value="12">12 hours</option>
+          <option value="24">24 hours</option>
+          <option value="48">48 hours</option>
+          <option value="72">72 hours (3 days)</option>
+          <option value="168">168 hours (1 week)</option>
+        </select>
+        <p className="text-xs text-gray-500 mt-1">Election auto-closes after this duration once activated.</p>
       </div>
       <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
         <Button variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
