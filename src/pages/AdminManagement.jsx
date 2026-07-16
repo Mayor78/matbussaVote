@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, query, where, updateDoc, setDoc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { Shield, ShieldAlert, UserPlus, Search, Trash2, ShieldCheck, Key, Copy } from 'lucide-react';
+import { Shield, ShieldAlert, UserPlus, Search, Trash2, ShieldCheck, Key, Copy, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { auditService } from '../services/auditService';
 import { authCodeService } from '../services/authCodeService';
@@ -121,6 +121,64 @@ const AdminManagement = () => {
     onError: (error) => toast.error(getUserFriendlyError(error)),
   });
 
+  const promoteMutation = useMutation({
+    mutationFn: async (adminId) => {
+      const admin = admins.find(a => a.id === adminId);
+      if (!admin || admin.role === 'super_admin') throw new Error('Already super admin');
+      await updateDoc(doc(db, 'admin_users', adminId), {
+        role: 'super_admin',
+        updatedAt: new Date().toISOString(),
+      });
+      if (admin.email) {
+        const studentSnap = await getDocs(query(collection(db, 'students'), where('email', '==', admin.email)));
+        if (!studentSnap.empty) {
+          const student = studentSnap.docs[0];
+          const studentData = student.data();
+          const uid = studentData.userId || studentData.user_id;
+          if (uid) {
+            await setDoc(doc(db, 'adminAccess', uid), {
+              email: admin.email.toLowerCase(),
+              role: 'super_admin',
+              updatedAt: new Date().toISOString(),
+            }, { merge: true });
+          }
+        }
+      }
+      await auditService.logAction({ action: 'ADMIN_PROMOTED', details: `Promoted ${admin.email} to super admin` });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); toast.success('Promoted to super admin'); },
+    onError: (error) => toast.error(getUserFriendlyError(error)),
+  });
+
+  const demoteMutation = useMutation({
+    mutationFn: async (adminId) => {
+      const admin = admins.find(a => a.id === adminId);
+      if (!admin || admin.role !== 'super_admin') throw new Error('Not a super admin');
+      await updateDoc(doc(db, 'admin_users', adminId), {
+        role: 'admin',
+        updatedAt: new Date().toISOString(),
+      });
+      if (admin.email) {
+        const studentSnap = await getDocs(query(collection(db, 'students'), where('email', '==', admin.email)));
+        if (!studentSnap.empty) {
+          const student = studentSnap.docs[0];
+          const studentData = student.data();
+          const uid = studentData.userId || studentData.user_id;
+          if (uid) {
+            await setDoc(doc(db, 'adminAccess', uid), {
+              email: admin.email.toLowerCase(),
+              role: 'admin',
+              updatedAt: new Date().toISOString(),
+            }, { merge: true });
+          }
+        }
+      }
+      await auditService.logAction({ action: 'ADMIN_DEMOTED', details: `Demoted ${admin.email} from super admin to admin` });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); toast.success('Demoted to regular admin'); },
+    onError: (error) => toast.error(getUserFriendlyError(error)),
+  });
+
   const deleteCodeMutation = useMutation({
     mutationFn: authCodeService.deleteCode,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['authCodes'] }); toast.success('Code deleted'); },
@@ -196,7 +254,18 @@ const AdminManagement = () => {
           <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" /><input type="text" placeholder="Search by email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm" /></div>
 
           {adminsLoading ? <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div></div> : (
-            <div className="bg-white rounded-xl shadow-sm border overflow-hidden"><div className="overflow-x-auto"><table className="w-full min-w-[500px]"><thead className="bg-gray-50"><tr><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Email</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Role</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Added</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Actions</th></tr></thead><tbody className="divide-y divide-gray-200">{filteredAdmins.map((admin) => (<tr key={admin.id} className="hover:bg-gray-50"><td className="px-4 py-3"><div className="flex items-center gap-2">{admin.role === 'super_admin' ? <ShieldCheck className="w-4 h-4 text-purple-600" /> : <Shield className="w-4 h-4 text-blue-600" />}<span className="text-sm font-medium text-gray-900">{admin.email}</span></div></td><td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${admin.role === 'super_admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>{admin.role?.replace('_', ' ').toUpperCase()}</span></td><td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${admin.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{admin.isActive !== false ? 'ACTIVE' : 'INACTIVE'}</span></td><td className="px-4 py-3 text-xs text-gray-500">{admin.createdAt || admin.created_at ? new Date(admin.createdAt || admin.created_at).toLocaleDateString() : 'N/A'}</td><td className="px-4 py-3">{admin.role !== 'super_admin' && <button onClick={() => removeAdminMutation.mutateAsync(admin.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>}</td></tr>))}</tbody></table></div></div>
+            <div className="bg-white rounded-xl shadow-sm border overflow-hidden"><div className="overflow-x-auto"><table className="w-full min-w-[500px]"><thead className="bg-gray-50"><tr><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Email</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Role</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Added</th><th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Actions</th></tr></thead><tbody className="divide-y divide-gray-200">{filteredAdmins.map((admin) => (<tr key={admin.id} className="hover:bg-gray-50"><td className="px-4 py-3"><div className="flex items-center gap-2">{admin.role === 'super_admin' ? <ShieldCheck className="w-4 h-4 text-purple-600" /> : <Shield className="w-4 h-4 text-blue-600" />}<span className="text-sm font-medium text-gray-900">{admin.email}</span></div></td><td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${admin.role === 'super_admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>{admin.role?.replace('_', ' ').toUpperCase()}</span></td><td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${admin.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{admin.isActive !== false ? 'ACTIVE' : 'INACTIVE'}</span></td><td className="px-4 py-3 text-xs text-gray-500">{admin.createdAt || admin.created_at ? new Date(admin.createdAt || admin.created_at).toLocaleDateString() : 'N/A'}</td><td className="px-4 py-3">
+  {admin.role !== 'super_admin' ? (
+    <div className="flex gap-1">
+      <button onClick={() => promoteMutation.mutateAsync(admin.id)} className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg" title="Promote to Super Admin"><ArrowUp className="w-4 h-4" /></button>
+      <button onClick={() => removeAdminMutation.mutateAsync(admin.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+    </div>
+  ) : admin.email?.toLowerCase() !== user?.email?.toLowerCase() ? (
+    <div className="flex gap-1">
+      <button onClick={() => demoteMutation.mutateAsync(admin.id)} className="p-1.5 text-orange-600 hover:text-orange-800 hover:bg-orange-50 rounded-lg" title="Demote to Regular Admin"><ArrowDown className="w-4 h-4" /></button>
+    </div>
+  ) : null}
+</td></tr>))}</tbody></table></div></div>
           )}
         </>
       )}

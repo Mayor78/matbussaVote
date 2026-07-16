@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight, Trash } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { auditService } from '../services/auditService';
 import Card from '../components/Card';
@@ -46,6 +46,8 @@ export const StudentManagement = () => {
   const [showAuthCode, setShowAuthCode] = useState(false);
   const [authAction, setAuthAction] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+  const [batchDeleteLevel, setBatchDeleteLevel] = useState('ND1');
 
   const { register, handleSubmit, reset, setError, clearErrors, formState: { errors } } = useForm({
     defaultValues: { fullName: '', matricNumber: '', level: 'ND1' },
@@ -100,6 +102,28 @@ export const StudentManagement = () => {
         details: `Deleted student: ${student?.fullName || id} (${student?.matricNumber || 'N/A'})`,
       });
       toast.success('Student removed');
+    },
+    onError: (error) => toast.error(getUserFriendlyError(error)),
+  });
+
+  const batchDeleteMutation = useMutation({
+    mutationFn: async (level) => {
+      const toDelete = students.filter(s => s.level === level);
+      let deleted = 0;
+      for (const s of toDelete) {
+        await deleteDoc(doc(db, 'students', s.id));
+        deleted++;
+      }
+      return { level, count: deleted };
+    },
+    onSuccess: ({ level, count }) => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      auditService.logAction({
+        action: 'STUDENTS_BATCH_DELETED',
+        details: `Batch deleted ${count} students from level ${level}`,
+      });
+      toast.success(`Deleted ${count} students from ${level}`);
+      setShowBatchDeleteModal(false);
     },
     onError: (error) => toast.error(getUserFriendlyError(error)),
   });
@@ -183,6 +207,19 @@ export const StudentManagement = () => {
     }, id);
   };
 
+  const handleBatchDeleteRequest = () => {
+    const count = students.filter(s => s.level === batchDeleteLevel).length;
+    if (count === 0) {
+      toast.error(`No students found in ${batchDeleteLevel}`);
+      return;
+    }
+    requireCode('DELETE_STUDENT', () => {
+      if (window.confirm(`Delete ALL ${count} students from ${batchDeleteLevel}? This cannot be undone.`)) {
+        batchDeleteMutation.mutateAsync(batchDeleteLevel);
+      }
+    });
+  };
+
   const openAddModal = () => {
     setEditingStudent(null);
     reset({ fullName: '', matricNumber: '', level: 'ND1' });
@@ -210,6 +247,7 @@ export const StudentManagement = () => {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowBulkModal(true)} size="sm"><Upload className="w-3.5 h-3.5 mr-1.5 inline" /> CSV Import</Button>
+          <Button variant="outline" onClick={() => setShowBatchDeleteModal(true)} size="sm" className="text-red-600 border-red-200 hover:bg-red-50"><Trash className="w-3.5 h-3.5 mr-1.5 inline" /> Batch Delete</Button>
           <Button onClick={openAddModal} size="sm"><Plus className="w-3.5 h-3.5 mr-1.5 inline" /> Add</Button>
         </div>
       </div>
@@ -308,6 +346,47 @@ export const StudentManagement = () => {
           <textarea value={bulkCsv} onChange={(e) => setBulkCsv(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" rows="8" placeholder="Full Name, Matric Number, Level" required />
           <div className="flex justify-end gap-2 pt-3 border-t"><Button variant="secondary" onClick={() => setShowBulkModal(false)}>Cancel</Button><Button type="submit" loading={submitting}>Import</Button></div>
         </form>
+      </Modal>
+
+      <Modal isOpen={showBatchDeleteModal} onClose={() => setShowBatchDeleteModal(false)} title="Batch Delete Students by Level">
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
+            <strong>Warning:</strong> This will permanently delete ALL students in the selected level. This action cannot be undone.
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Level to Delete</label>
+            <select
+              value={batchDeleteLevel}
+              onChange={(e) => setBatchDeleteLevel(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="ND1">ND1</option>
+              <option value="ND2">ND2</option>
+              <option value="HND1">HND1</option>
+              <option value="HND2">HND2</option>
+            </select>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-sm text-gray-700">
+              Students in <strong>{batchDeleteLevel}</strong>:{' '}
+              <strong className="text-red-600">{students.filter(s => s.level === batchDeleteLevel).length}</strong>
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Registered: {students.filter(s => s.level === batchDeleteLevel && s.registeredStatus).length} | Not registered: {students.filter(s => s.level === batchDeleteLevel && !s.registeredStatus).length}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button variant="secondary" onClick={() => setShowBatchDeleteModal(false)}>Cancel</Button>
+            <Button
+              onClick={handleBatchDeleteRequest}
+              loading={batchDeleteMutation.isPending}
+              disabled={students.filter(s => s.level === batchDeleteLevel).length === 0}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete All {batchDeleteLevel} Students
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <AuthCodeModal

@@ -20,32 +20,21 @@ export const auditService = {
     }
   },
 
-  async getAuditLogs({ pageSize = 50, lastVisible = null, actionFilter = '' } = {}) {
+  async getAuditLogs({ pageSize = 25, lastVisible = null, actionFilter = '' } = {}) {
     try {
-      let q = query(
-        collection(db, 'auditLogs'),
-        orderBy('timestamp', 'desc'),
-        limit(pageSize)
-      );
-
-      if (lastVisible) {
-        q = query(
-          collection(db, 'auditLogs'),
-          orderBy('timestamp', 'desc'),
-          startAfter(lastVisible),
-          limit(pageSize)
-        );
-      }
+      const constraints = [orderBy('timestamp', 'desc')];
 
       if (actionFilter) {
-        q = query(
-          collection(db, 'auditLogs'),
-          where('action', '==', actionFilter),
-          orderBy('timestamp', 'desc'),
-          limit(pageSize)
-        );
+        constraints.push(where('action', '==', actionFilter));
       }
 
+      if (lastVisible) {
+        constraints.push(startAfter(lastVisible));
+      }
+
+      constraints.push(limit(pageSize));
+
+      const q = query(collection(db, 'auditLogs'), ...constraints);
       const snapshot = await getDocs(q);
       const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
