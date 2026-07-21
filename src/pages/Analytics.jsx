@@ -1,36 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
 import { db } from '../lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where, getCountFromServer } from 'firebase/firestore';
 import { BarChart3, Users, Vote, TrendingUp, Calendar, Award, PieChart, Activity } from 'lucide-react';
 
 const fetchAnalytics = async () => {
-  const [electionsSnap, positionsSnap, candidatesSnap, votesSnap, studentsSnap] = await Promise.all([
+  const [electionsSnap, positionsSnap, candidatesSnap, totalStudentsCount, registeredCount] = await Promise.all([
     getDocs(collection(db, 'elections')),
     getDocs(collection(db, 'positions')),
     getDocs(collection(db, 'candidates')),
-    getDocs(collection(db, 'votes')),
-    getDocs(collection(db, 'students')),
+    getCountFromServer(collection(db, 'students')),
+    getCountFromServer(query(collection(db, 'students'), where('registeredStatus', '==', true))),
   ]);
 
   const elections = electionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const positions = positionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const candidates = candidatesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const votes = votesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  const totalStudents = studentsSnap.docs.length;
-  let registeredStudents = 0;
-  studentsSnap.docs.forEach(doc => {
-    const d = doc.data();
-    if (d.registeredStatus ?? d.registered_status) registeredStudents++;
-  });
+  const totalStudents = totalStudentsCount.data().count;
+  const registeredStudents = registeredCount.data().count;
 
   const electionStats = elections.map(election => {
     const electionPositions = positions.filter(p => p.electionId === election.id);
     const electionCandidates = candidates.filter(c => c.electionId === election.id);
-    const electionVotes = votes.filter(v => v.electionId === election.id);
+    const electionVoteCount = electionCandidates.reduce((sum, c) => sum + (c.voteCount || 0), 0);
     
     const totalPossibleVotes = registeredStudents * electionPositions.length;
-    const turnout = totalPossibleVotes > 0 ? ((electionVotes.length / totalPossibleVotes) * 100).toFixed(1) : 0;
+    const turnout = totalPossibleVotes > 0 ? ((electionVoteCount / totalPossibleVotes) * 100).toFixed(1) : 0;
 
     return {
       id: election.id,
@@ -39,7 +34,7 @@ const fetchAnalytics = async () => {
       session: election.academicSession || election.academic_session,
       positions: electionPositions.length,
       candidates: electionCandidates.length,
-      votes: electionVotes.length,
+      votes: electionVoteCount,
       turnout,
     };
   });
@@ -50,7 +45,7 @@ const fetchAnalytics = async () => {
   const statusDistribution = { draft: 0, published: 0, open: 0, closed: 0 };
   elections.forEach(e => { if (statusDistribution[e.status] !== undefined) statusDistribution[e.status]++; });
 
-  const totalVotes = votes.length;
+  const totalVotes = candidates.reduce((sum, c) => sum + (c.voteCount || 0), 0);
   const totalElections = elections.length;
 
   return {
@@ -70,7 +65,7 @@ const Analytics = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['analytics'],
     queryFn: fetchAnalytics,
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   if (isLoading) {

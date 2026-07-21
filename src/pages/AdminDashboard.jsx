@@ -9,27 +9,24 @@ import { Users, Vote, TrendingUp, UserCheck, Plus, Play, Square, Eye } from 'luc
 import AuthCodeModal from '../components/AuthCodeModal';
 import { electionSchema } from '../utils/schemas';
 import { getUserFriendlyError } from '../utils/errors';
+import { bundleService } from '../services/electionBundleService';
 
 const fetchStats = async () => {
-  const [studentsSnap, votesSnap, activeSnap, positionsSnap, candidatesSnap] = await Promise.all([
-    getDocs(collection(db, 'students')),
+  const [totalStudentsCount, registeredCount, votesCount, activeCount, positionsCount, candidatesCount] = await Promise.all([
+    getCountFromServer(collection(db, 'students')),
+    getCountFromServer(query(collection(db, 'students'), where('registeredStatus', '==', true))),
     getCountFromServer(collection(db, 'votes')),
     getCountFromServer(query(collection(db, 'elections'), where('status', '==', 'open'))),
     getCountFromServer(collection(db, 'positions')),
     getCountFromServer(collection(db, 'candidates')),
   ]);
 
-  const totalStudents = studentsSnap.docs.length;
-  let registeredStudents = 0;
-  studentsSnap.docs.forEach(doc => {
-    const d = doc.data();
-    if (d.registeredStatus ?? d.registered_status) registeredStudents++;
-  });
-
-  const totalVotes = votesSnap.data().count;
-  const activeElections = activeSnap.data().count;
-  const totalPositions = positionsSnap.data().count;
-  const totalCandidates = candidatesSnap.data().count;
+  const totalStudents = totalStudentsCount.data().count;
+  const registeredStudents = registeredCount.data().count;
+  const totalVotes = votesCount.data().count;
+  const activeElections = activeCount.data().count;
+  const totalPositions = positionsCount.data().count;
+  const totalCandidates = candidatesCount.data().count;
   const turnout = registeredStudents > 0 && totalPositions > 0
     ? ((totalVotes / (registeredStudents * Math.max(totalPositions, 1))) * 100).toFixed(1)
     : 0;
@@ -38,27 +35,24 @@ const fetchStats = async () => {
 };
 
 const fetchElections = async () => {
-  const q = query(collection(db, 'elections'));
-  const snapshot = await getDocs(q);
-  const elections = [];
-  const positionsSnap = await getDocs(collection(db, 'positions'));
-  const candidatesSnap = await getDocs(collection(db, 'candidates'));
-  const votesSnap = await getDocs(collection(db, 'votes'));
-
-  const positions = positionsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
-  const candidates = candidatesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
-  const votes = votesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
-
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    elections.push({
-      id: doc.id,
-      ...data,
-      positionsCount: positions.filter(p => p.electionId === doc.id).length,
-      candidatesCount: candidates.filter(c => c.electionId === doc.id).length,
-      votesCount: votes.filter(v => v.electionId === doc.id).length,
-    });
-  });
+  const snapshot = await getDocs(query(collection(db, 'elections')));
+  const elections = await Promise.all(
+    snapshot.docs.map(async (d) => {
+      const data = d.data();
+      const eid = d.id;
+      const [posCount, candCount, voteCount] = await Promise.all([
+        getCountFromServer(query(collection(db, 'positions'), where('electionId', '==', eid))),
+        getCountFromServer(query(collection(db, 'candidates'), where('electionId', '==', eid))),
+        getCountFromServer(query(collection(db, 'votes'), where('electionId', '==', eid))),
+      ]);
+      return {
+        id: eid, ...data,
+        positionsCount: posCount.data().count,
+        candidatesCount: candCount.data().count,
+        votesCount: voteCount.data().count,
+      };
+    })
+  );
 
   elections.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   return elections;
@@ -99,13 +93,13 @@ const AdminDashboard = () => {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['adminStats'],
     queryFn: fetchStats,
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   const { data: elections = [], isLoading: electionsLoading } = useQuery({
     queryKey: ['adminElections'],
     queryFn: fetchElections,
-    refetchInterval: 15000,
+    refetchInterval: 120000,
   });
 
   const statusMutation = useMutation({
@@ -118,6 +112,9 @@ const AdminDashboard = () => {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['adminElections'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      if (result.status === 'open') {
+        bundleService.buildBundle(result.electionId).catch(() => {});
+      }
       toast.success(`Election ${result.status}!`);
     },
     onError: (error) => toast.error(getUserFriendlyError(error)),

@@ -69,6 +69,7 @@ export const candidateService = {
         manifesto: candidateData.manifesto || '',
         photoUrl,
         cloudinaryPublicId,
+        voteCount: 0,
         createdAt: now,
         updatedAt: now,
       };

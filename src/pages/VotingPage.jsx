@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs, runTransaction, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, runTransaction, doc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, Clock } from 'lucide-react';
@@ -10,6 +10,7 @@ import { getUserFriendlyError } from '../utils/errors';
 import { auditService } from '../services/auditService';
 import { generateDeviceSignature } from '../utils/deviceFingerprint';
 import { CountdownBanner, useCountdown } from '../components/CountdownTimer';
+import { bundleService } from '../services/electionBundleService';
 
 const generateVoteHash = async (electionId, positionId, studentId) => {
   const payload = `${electionId}:${positionId}:${studentId}:${Date.now()}`;
@@ -36,30 +37,36 @@ const VotingPage = () => {
   const loadElectionData = async (electionId, studentId) => {
     setLoading(true);
     try {
-      const results = await Promise.allSettled([
-        getDocs(query(collection(db, 'positions'), where('electionId', '==', electionId))),
-        getDocs(query(collection(db, 'candidates'), where('electionId', '==', electionId))),
-        getDocs(query(collection(db, 'votes'), where('electionId', '==', electionId), where('studentId', '==', studentId))),
-      ]);
+      let bundle = await bundleService.getBundle(electionId);
+      let positionsList;
+      let candidatesList;
 
-      const labels = ['positions', 'candidates', 'votes'];
-      results.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          console.error(`[VotingPage] ${labels[i]} read failed:`, r.reason.code, r.reason.message);
-        }
-      });
-
-      const failed = results.findIndex(r => r.status === 'rejected');
-      if (failed >= 0) {
-        throw new Error(`Failed to read ${labels[failed]}: ${results[failed].reason.message}`);
+      if (bundle && bundle.positions) {
+        positionsList = bundle.positions.map(p => ({
+          id: p.id, title: p.title, description: p.description, displayOrder: p.displayOrder,
+        }));
+        candidatesList = bundle.positions.flatMap(p =>
+          (p.candidates || []).map(c => ({ ...c, positionId: p.id }))
+        );
+      } else {
+        const [posSnap, candSnap] = await Promise.all([
+          getDocs(query(collection(db, 'positions'), where('electionId', '==', electionId))),
+          getDocs(query(collection(db, 'candidates'), where('electionId', '==', electionId))),
+        ]);
+        positionsList = posSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        positionsList.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+        candidatesList = candSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        bundleService.buildBundle(electionId).catch(() => {});
       }
 
-      const [posSnap, candSnap, voteSnap] = results.map(r => r.value);
+      const voteSnap = await getDocs(query(
+        collection(db, 'votes'),
+        where('electionId', '==', electionId),
+        where('studentId', '==', studentId)
+      ));
 
-      const posList = posSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      posList.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
-      setPositions(posList);
-      setCandidates(candSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPositions(positionsList);
+      setCandidates(candidatesList);
 
       const existing = {};
       voteSnap.docs.forEach(d => { const v = d.data(); existing[v.positionId] = v.candidateId; });
@@ -157,6 +164,11 @@ const VotingPage = () => {
           where('studentId', '==', student.id)
         ));
         if (!checkSnap.empty) throw new Error('ALREADY_VOTED');
+
+        const candidateRef = doc(db, 'candidates', candidateId);
+        const candSnap = await transaction.get(candidateRef);
+        const currentCount = (candSnap.data()?.voteCount || 0) + 1;
+        transaction.update(candidateRef, { voteCount: currentCount });
 
         transaction.set(lockRef, {
           electionId: selectedElection.id, positionId, studentId: student.id,

@@ -1,4 +1,7 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { electionService } from '../services/electionService';
 import { auditService } from '../services/auditService';
 import toast from 'react-hot-toast';
@@ -9,8 +12,21 @@ export const useElections = () => {
   const { data: elections = [], isLoading, error } = useQuery({
     queryKey: ['elections'],
     queryFn: electionService.getAllElections,
-    staleTime: 30000,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
   });
+
+  useEffect(() => {
+    const q = query(collection(db, 'elections'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      queryClient.setQueryData(['elections'], data);
+    });
+    return () => unsubscribe();
+  }, [queryClient]);
 
   const createMutation = useMutation({
     mutationFn: electionService.createElection,
