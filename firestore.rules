@@ -8,12 +8,12 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() &&
-        exists(/databases/$(database)/documents/adminAccess/$(request.auth.token.email));
+        exists(/databases/$(database)/documents/adminAccess/$(request.auth.uid));
     }
 
     function isSuperAdmin() {
       return isAdmin() &&
-        get(/databases/$(database)/documents/adminAccess/$(request.auth.token.email)).data.role == 'super_admin';
+        get(/databases/$(database)/documents/adminAccess/$(request.auth.uid)).data.role == 'super_admin';
     }
 
     function isOwnerOfStudent(studentId) {
@@ -23,12 +23,12 @@ service cloud.firestore {
 
     // ── STUDENTS ──
     match /students/{studentId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create: if isAdmin();
       allow update: if isAdmin() || (
         isSignedIn()
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['email', 'registeredStatus', 'userId', 'updatedAt'])
+          .hasOnly(['email', 'registeredStatus', 'votingStatus', 'updatedAt'])
       );
       allow delete: if isAdmin();
     }
@@ -46,9 +46,15 @@ service cloud.firestore {
     }
 
     // ── CANDIDATES ──
+    // Students can only increment the voteCount field during voting
     match /candidates/{candidateId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voteCount'])
+        && request.resource.data.voteCount is number
+      );
     }
 
     // ── VOTES ──
@@ -58,18 +64,14 @@ service cloud.firestore {
         && request.resource.data.candidateId is string
         && request.resource.data.electionId is string
         && request.resource.data.positionId is string
-        && request.resource.data.studentId is string
-        && request.resource.data.voteHash is string;
+        && request.resource.data.studentId is string;
       allow update, delete: if false;
     }
 
     // ── VOTE LOCKS ──
     match /voteLocks/{lockId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn()
-        && request.resource.data.studentId is string
-        && request.resource.data.electionId is string
-        && request.resource.data.positionId is string;
+      allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
 
@@ -80,9 +82,11 @@ service cloud.firestore {
     }
 
     // ── ADMIN ACCESS MARKERS ──
-    match /adminAccess/{email} {
+    match /adminAccess/{userId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSuperAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if request.auth.uid == userId;
+      allow delete: if isSuperAdmin();
     }
 
     // ── AUDIT LOGS ──
@@ -100,26 +104,24 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // ── RATE LIMITS ──
-    match /rateLimits/{rateLimitId} {
-      allow read: if isSignedIn();
-      allow create: if request.resource.data.attempts is number
-        && request.resource.data.attempts <= 10
-        && request.resource.data.lastAttempt is string;
-      allow update: if request.resource.data.attempts is number
-        && request.resource.data.lastAttempt is string;
-      allow delete: if isAdmin();
-    }
-
     // ── ELECTION BUNDLES ──
     match /electionBundles/{electionId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
     }
 
+    // ── RATE LIMITS ──
+    match /rateLimits/{rateLimitId} {
+      allow read: if true;
+      allow create: if request.resource.data.attempts is number
+        && request.resource.data.attempts <= 10;
+      allow update: if request.resource.data.attempts is number;
+      allow delete: if isAdmin();
+    }
+
     // ── DEVICE BINDINGS ──
     match /deviceBindings/{signature} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create: if isSignedIn()
         && request.resource.data.studentEmail is string
         && request.resource.data.studentId is string;
