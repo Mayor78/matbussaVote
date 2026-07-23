@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, getCountFromServer, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 import { Users, Vote, TrendingUp, UserCheck, Plus, Play, Square, Eye } from 'lucide-react';
 import AuthCodeModal from '../components/AuthCodeModal';
 import { electionSchema } from '../utils/schemas';
@@ -115,9 +115,9 @@ const AdminDashboard = () => {
       if (result.status === 'open') {
         bundleService.buildBundle(result.electionId).catch(() => {});
       }
-      toast.success(`Election ${result.status}!`);
+      swal.success('Success', `Election ${result.status}!`);
     },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   useEffect(() => {
@@ -179,13 +179,13 @@ const AdminDashboard = () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      toast.success('Election created!');
+      swal.success('Success', 'Election created!');
       setShowCreateModal(false);
       reset({ title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 });
       queryClient.invalidateQueries({ queryKey: ['adminElections'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally {
       setSubmitting(false);
     }

@@ -8,7 +8,7 @@ import { Image, X } from 'lucide-react';
 import { isValidFileType, isValidFileSize } from '../../utils/sanitize';
 import { candidateSchema } from '../../utils/schemas';
 import { getUserFriendlyError } from '../../utils/errors';
-import toast from 'react-hot-toast';
+import swal from '../../utils/swal';
 
 export const CandidateForm = ({ electionId: propElectionId = '', positionId = '', candidate = null, onSuccess, onCancel }) => {
   const [selectedElectionId, setSelectedElectionId] = useState(propElectionId || '');
@@ -86,11 +86,11 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
     const file = e.target.files[0];
     if (!file) return;
     if (!isValidFileType(file)) {
-      toast.error('Only JPG, PNG, and WebP images are allowed');
+      swal.error('Error', 'Only JPG, PNG, and WebP images are allowed');
       return;
     }
     if (!isValidFileSize(file, 2)) {
-      toast.error('Image must be under 2MB');
+      swal.error('Error', 'Image must be under 2MB');
       return;
     }
     setPhotoFile(file);
@@ -121,7 +121,7 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
       }
       onSuccess();
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }

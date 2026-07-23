@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 import logo from '../assets/IMG_5038.jpeg'; 
 import { Eye, EyeOff, UserCheck, ArrowLeft, ArrowRight, Mail } from 'lucide-react';
 import { studentRegistrationStep1Schema, studentRegistrationStep2Schema } from '../utils/schemas';
@@ -50,21 +50,21 @@ const StudentRegistration = () => {
       });
 
       if (!foundStudent) {
-        toast.error('Student record not found. Please check your details.');
+        swal.error('Student Not Found', 'Student record not found. Please check your details.');
         return;
       }
 
       const registered = foundStudent.registeredStatus ?? foundStudent.registered_status;
       if (registered) {
-        toast.error('This matric number is already registered. Please login instead.');
+        swal.error('Already Registered', 'This matric number is already registered. Please login instead.');
         return;
       }
 
       setStudentData(foundStudent);
       setStep(2);
-      toast.success('Student verified! Please complete your registration.');
+      swal.success('Student Verified', 'Student verified! Please complete your registration.');
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }
@@ -88,7 +88,7 @@ const StudentRegistration = () => {
     const enteredName = formData.nameCompletion.toLowerCase();
 
     if (!enteredName.includes(lastName) && !fullName.toLowerCase().includes(enteredName)) {
-      toast.error('Name verification failed. Please try again.');
+        swal.error('Verification Failed', 'Name verification failed. Please try again.');
       return;
     }
 
@@ -100,7 +100,7 @@ const StudentRegistration = () => {
         level: studentData.level
       });
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight, Trash } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { auditService } from '../services/auditService';
@@ -68,9 +68,9 @@ export const StudentManagement = () => {
     onSuccess: (_, data) => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
       auditService.logAction({ action: 'STUDENT_PRELOADED', details: `Added student: ${data.fullName} (${data.matricNumber})` });
-      toast.success('Student preloaded');
+      swal.success('Success', 'Student preloaded');
     },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const updateMutation = useMutation({
@@ -87,9 +87,9 @@ export const StudentManagement = () => {
         action: 'STUDENT_UPDATED',
         details: `Edited student: ${student?.fullName || id} — new matric: ${data.matricNumber}, level: ${data.level}`,
       });
-      toast.success('Student updated');
+      swal.success('Success', 'Student updated');
     },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const deleteMutation = useMutation({
@@ -101,9 +101,9 @@ export const StudentManagement = () => {
         action: 'STUDENT_DELETED',
         details: `Deleted student: ${student?.fullName || id} (${student?.matricNumber || 'N/A'})`,
       });
-      toast.success('Student removed');
+      swal.success('Success', 'Student removed');
     },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const batchDeleteMutation = useMutation({
@@ -122,10 +122,10 @@ export const StudentManagement = () => {
         action: 'STUDENTS_BATCH_DELETED',
         details: `Batch deleted ${count} students from level ${level}`,
       });
-      toast.success(`Deleted ${count} students from ${level}`);
+      swal.success('Success', `Deleted ${count} students from ${level}`);
       setShowBatchDeleteModal(false);
     },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const onAddEditSubmit = async (data) => {
@@ -142,16 +142,16 @@ export const StudentManagement = () => {
     try {
       if (editingStudent) {
         const exists = students.some(s => s.matricNumber.toLowerCase() === result.data.matricNumber.toLowerCase() && s.id !== editingStudent.id);
-        if (exists) { toast.error('Matric number already exists'); return; }
+        if (exists) { swal.error('Error', 'Matric number already exists'); return; }
         await updateMutation.mutateAsync({ id: editingStudent.id, data: result.data });
       } else {
         const exists = students.some(s => s.matricNumber.toLowerCase() === result.data.matricNumber.toLowerCase());
-        if (exists) { toast.error('Matric number already exists'); return; }
+        if (exists) { swal.error('Error', 'Matric number already exists'); return; }
         await addMutation.mutateAsync(result.data);
       }
       setShowAddModal(false); setEditingStudent(null); reset({ fullName: '', matricNumber: '', level: 'ND1' });
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally { setSubmitting(false); }
   };
 
@@ -173,10 +173,10 @@ export const StudentManagement = () => {
         success++;
       }
       auditService.logAction({ action: 'STUDENT_PRELOADED', details: `Bulk imported ${success} students (${skipped} skipped)` });
-      toast.success(`${success} preloaded! (${skipped} skipped)`);
+      swal.success('Success', `${success} preloaded! (${skipped} skipped)`);
       setShowBulkModal(false); setBulkCsv('');
       queryClient.invalidateQueries({ queryKey: ['students'] });
-    } catch (error) { toast.error(getUserFriendlyError(error)); }
+    } catch (error) { swal.error('Error', getUserFriendlyError(error)); }
     finally { setSubmitting(false); }
   };
 
@@ -210,7 +210,7 @@ export const StudentManagement = () => {
   const handleBatchDeleteRequest = () => {
     const count = students.filter(s => s.level === batchDeleteLevel).length;
     if (count === 0) {
-      toast.error(`No students found in ${batchDeleteLevel}`);
+      swal.error('Error', `No students found in ${batchDeleteLevel}`);
       return;
     }
     requireCode('DELETE_STUDENT', () => {

@@ -4,7 +4,7 @@ import { useElections } from '../../hooks/useElections';
 import Button from '../Button';
 import { electionSchema } from '../../utils/schemas';
 import { getUserFriendlyError } from '../../utils/errors';
-import toast from 'react-hot-toast';
+import swal from '../../utils/swal';
 
 export const ElectionForm = ({ election = null, onSuccess, onCancel }) => {
   const { createElection, updateElection } = useElections();
@@ -48,7 +48,7 @@ export const ElectionForm = ({ election = null, onSuccess, onCancel }) => {
       }
       onSuccess();
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }

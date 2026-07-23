@@ -4,7 +4,7 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../lib/firebase';
 import { positionService } from '../services/positionService';
 import { bundleService } from '../services/electionBundleService';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 
 export const usePositions = (electionId) => {
   const queryClient = useQueryClient();
@@ -41,9 +41,9 @@ export const usePositions = (electionId) => {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['positions', electionId] });
         bundleService.buildBundle(electionId).catch(() => {});
-        toast.success('Position added!');
+        swal.success('Position Added', 'Position has been added.');
       },
-    onError: () => toast.error('Failed to add position'),
+    onError: () => swal.error('Error', 'Failed to add position'),
   });
 
   const updateMutation = useMutation({
@@ -51,9 +51,9 @@ export const usePositions = (electionId) => {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['positions', electionId] });
         bundleService.buildBundle(electionId).catch(() => {});
-        toast.success('Position updated!');
+        swal.success('Position Updated', 'Position has been updated.');
       },
-    onError: () => toast.error('Failed to update position'),
+    onError: () => swal.error('Error', 'Failed to update position'),
   });
 
   const deleteMutation = useMutation({
@@ -61,9 +61,9 @@ export const usePositions = (electionId) => {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['positions', electionId] });
         bundleService.buildBundle(electionId).catch(() => {});
-        toast.success('Position deleted!');
+        swal.success('Position Deleted', 'Position has been removed.');
       },
-    onError: () => toast.error('Failed to delete position'),
+    onError: () => swal.error('Error', 'Failed to delete position'),
   });
 
   return {

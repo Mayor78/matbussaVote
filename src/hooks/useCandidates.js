@@ -4,7 +4,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { candidateService } from '../services/candidateService';
 import { bundleService } from '../services/electionBundleService';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 
 export const useCandidates = (electionId, positionId = null) => {
   const queryClient = useQueryClient();
@@ -43,9 +43,9 @@ export const useCandidates = (electionId, positionId = null) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates', electionId] });
       bundleService.buildBundle(electionId).catch(() => {});
-      toast.success('Candidate added!');
+      swal.success('Candidate Added', 'Candidate has been added successfully.');
     },
-    onError: () => toast.error('Failed to add candidate'),
+    onError: () => swal.error('Error', 'Failed to add candidate'),
   });
 
   const updateMutation = useMutation({
@@ -53,9 +53,9 @@ export const useCandidates = (electionId, positionId = null) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates', electionId] });
       bundleService.buildBundle(electionId).catch(() => {});
-      toast.success('Candidate updated!');
+      swal.success('Candidate Updated', 'Candidate has been updated.');
     },
-    onError: () => toast.error('Failed to update candidate'),
+    onError: () => swal.error('Error', 'Failed to update candidate'),
   });
 
   const deleteMutation = useMutation({
@@ -63,9 +63,9 @@ export const useCandidates = (electionId, positionId = null) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates', electionId] });
       bundleService.buildBundle(electionId).catch(() => {});
-      toast.success('Candidate deleted!');
+      swal.success('Candidate Deleted', 'Candidate has been removed.');
     },
-    onError: () => toast.error('Failed to delete candidate'),
+    onError: () => swal.error('Error', 'Failed to delete candidate'),
   });
 
   return {

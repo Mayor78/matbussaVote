@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, query, where, updateDoc, setDoc } from 'firebase/firestore';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 import { Shield, ShieldAlert, UserPlus, Search, Trash2, ShieldCheck, Key, Copy, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { auditService } from '../services/auditService';
@@ -91,10 +91,10 @@ const AdminManagement = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
-      toast.success('Admin added');
+      swal.success('Success', 'Admin added');
       setShowAddModal(false); reset({ email: '' });
     },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const removeAdminMutation = useMutation({
@@ -117,8 +117,8 @@ const AdminManagement = () => {
       }
       await auditService.logAction({ action: 'ADMIN_REMOVED', details: `Removed admin: ${admin?.email || adminId}` });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); toast.success('Admin removed'); },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); swal.success('Success', 'Admin removed'); },
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const promoteMutation = useMutation({
@@ -146,8 +146,8 @@ const AdminManagement = () => {
       }
       await auditService.logAction({ action: 'ADMIN_PROMOTED', details: `Promoted ${admin.email} to super admin` });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); toast.success('Promoted to super admin'); },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); swal.success('Success', 'Promoted to super admin'); },
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const demoteMutation = useMutation({
@@ -175,13 +175,13 @@ const AdminManagement = () => {
       }
       await auditService.logAction({ action: 'ADMIN_DEMOTED', details: `Demoted ${admin.email} from super admin to admin` });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); toast.success('Demoted to regular admin'); },
-    onError: (error) => toast.error(getUserFriendlyError(error)),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); swal.success('Success', 'Demoted to regular admin'); },
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
   const deleteCodeMutation = useMutation({
     mutationFn: authCodeService.deleteCode,
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['authCodes'] }); toast.success('Code deleted'); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['authCodes'] }); swal.success('Success', 'Code deleted'); },
   });
 
   const handleGenerateCode = async () => {
@@ -191,13 +191,13 @@ const AdminManagement = () => {
       setGeneratedCode(code);
       queryClient.invalidateQueries({ queryKey: ['authCodes'] });
       await auditService.logAction({ action: 'AUTH_CODE_GENERATED', details: `Generated ${codeAction} code` });
-    } catch { toast.error('Failed to generate code'); }
+    } catch { swal.error('Error', 'Failed to generate code'); }
     finally { setSubmitting(false); }
   };
 
   const copyCode = () => {
     navigator.clipboard.writeText(generatedCode);
-    toast.success('Code copied!');
+    swal.success('Success', 'Code copied!');
   };
 
   if (!isSuperAdmin) {

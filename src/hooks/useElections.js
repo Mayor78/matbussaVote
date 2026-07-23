@@ -4,7 +4,7 @@ import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { electionService } from '../services/electionService';
 import { auditService } from '../services/auditService';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 
 export const useElections = () => {
   const queryClient = useQueryClient();
@@ -34,9 +34,9 @@ export const useElections = () => {
       queryClient.setQueryData(['elections'], (old) => [newElection, ...(old || [])]);
       queryClient.invalidateQueries({ queryKey: ['election', newElection.id] });
       auditService.logAction({ action: 'ELECTION_CREATED', details: `Created election: ${newElection.title}` });
-      toast.success('Election created!');
+      swal.success('Election Created', `Election "${newElection.title}" has been created.`);
     },
-    onError: () => toast.error('Failed to create election'),
+    onError: () => swal.error('Error', 'Failed to create election'),
   });
 
   const updateMutation = useMutation({
@@ -47,9 +47,9 @@ export const useElections = () => {
       );
       queryClient.invalidateQueries({ queryKey: ['election', updated.id] });
       auditService.logAction({ action: 'ELECTION_UPDATED', details: `Updated election: ${updated.title || updated.id}` });
-      toast.success('Election updated!');
+      swal.success('Election Updated', `Election has been updated.`);
     },
-    onError: () => toast.error('Failed to update election'),
+    onError: () => swal.error('Error', 'Failed to update election'),
   });
 
   const deleteMutation = useMutation({
@@ -57,9 +57,9 @@ export const useElections = () => {
     onSuccess: (_, id) => {
       queryClient.setQueryData(['elections'], (old) => (old || []).filter(e => e.id !== id));
       auditService.logAction({ action: 'ELECTION_DELETED', details: `Deleted election ID: ${id}` });
-      toast.success('Election deleted!');
+      swal.success('Election Deleted', 'The election has been deleted.');
     },
-    onError: () => toast.error('Failed to delete election'),
+    onError: () => swal.error('Error', 'Failed to delete election'),
   });
 
   const statusMutation = useMutation({
@@ -70,9 +70,9 @@ export const useElections = () => {
       );
       queryClient.invalidateQueries({ queryKey: ['election', result.id] });
       auditService.logAction({ action: `ELECTION_${result.status.toUpperCase()}`, details: `Election ID: ${result.id}` });
-      toast.success(`Election ${result.status}!`);
+      swal.success(`Election ${result.status}`, `Election is now ${result.status}.`);
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: () => swal.error('Error', 'Failed to update status'),
   });
 
   return {

@@ -3,7 +3,7 @@ import { electionService } from '../../services/electionService';
 import { validateElectionReady } from '../../utils/electionValidation';
 import { AlertCircle, CheckCircle, Play, Square, Eye } from 'lucide-react';
 import AuthCodeModal from '../AuthCodeModal';
-import toast from 'react-hot-toast';
+import swal from '../../utils/swal';
 
 export const ElectionSettings = ({ election, positions = [], candidates = [], onUpdate }) => {
   const [loading, setLoading] = useState(false);
@@ -18,15 +18,15 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
       const validation = await validateElectionReady(election.id);
       if (!validation.isValid) {
         setValidationErrors(validation.errors);
-        toast.error('Cannot publish: Please fix the issues below');
+        swal.error('Error', 'Cannot publish: Please fix the issues below');
         return;
       }
       setValidationErrors([]);
       await electionService.publishElection(election.id);
-      toast.success('Election published!');
+      swal.success('Success', 'Election published!');
       onUpdate();
     } catch (error) {
-      toast.error(error.message);
+      swal.error('Error', error.message);
     } finally { setLoading(false); }
   };
 
@@ -34,10 +34,10 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
     setLoading(true);
     try {
       await electionService.openElection(election.id);
-      toast.success('Voting is now OPEN!');
+      swal.success('Success', 'Voting is now OPEN!');
       onUpdate();
     } catch (error) {
-      toast.error(error.message);
+      swal.error('Error', error.message);
     } finally { setLoading(false); }
   };
 
@@ -53,10 +53,10 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
       setLoading(true);
       try {
         await electionService.closeElection(election.id);
-        toast.success('Election closed');
+        swal.success('Success', 'Election closed');
         onUpdate();
       } catch (error) {
-        toast.error(error.message);
+        swal.error('Error', error.message);
       } finally { setLoading(false); }
     });
   };

@@ -3,7 +3,7 @@ import { auth, db } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, where, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 import { rateLimitService } from '../services/rateLimitService';
 import { getUserFriendlyError } from '../utils/errors';
 import { generateDeviceSignature } from '../utils/deviceFingerprint';
@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
       sessionTimer.current = setTimeout(async () => {
         const elapsed = Date.now() - lastActivityRef.current;
         if (elapsed >= SESSION_TIMEOUT_MS) {
-          toast.error('Session expired due to inactivity. Please login again.');
+          swal.error('Session Expired', 'Your session has expired due to inactivity. Please log in again.');
           try { await auth.signOut(); } catch { /* ignore signout errors */ }
           setUser(null);
           setIsAdminUser(false);
@@ -170,7 +170,7 @@ export const AuthProvider = ({ children }) => {
       const rateResult = await rateLimitService.checkRateLimit(identifier);
       if (!rateResult.allowed) {
         const min = rateResult.remainingMinutes || 5;
-        toast.error(`Too many attempts. Try again in ${min} minute${min > 1 ? 's' : ''}.`);
+        swal.error('Too Many Attempts', `Too many login attempts. Try again in ${min} minute${min > 1 ? 's' : ''}.`);
         throw new Error('Rate limited');
       }
     } catch (e) {
@@ -195,11 +195,11 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (!foundStudent) {
-          toast.error('Student not found. Check your matric number.');
+          swal.error('Student Not Found', 'No student record matches this matric number. Please check and try again.');
           throw new Error('Student not found');
         }
         if (!foundStudent.email) {
-          toast.error('Please complete your registration first.');
+          swal.error('Registration Required', 'Please complete your registration before logging in.');
           throw new Error('Not registered');
         }
         email = foundStudent.email;
@@ -216,7 +216,7 @@ export const AuthProvider = ({ children }) => {
 
           if (!check.allowed) {
             await auth.signOut();
-            toast.error(check.reason);
+            swal.error('Device Binding', check.reason);
             throw new Error('Device already bound');
           }
 
@@ -227,14 +227,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       try { await rateLimitService.resetRateLimit(identifier); } catch { /* best-effort */ }
-      toast.success('Login successful!');
+      swal.success('Login Successful', 'Welcome back!');
     } catch (error) {
       if (error.message === 'Student not found' || error.message === 'Not registered' || error.message === 'Device already bound') {
         throw error;
       }
 
       const msg = getUserFriendlyError(error);
-      toast.error(msg);
+      swal.error('Login Failed', msg);
 
       try {
         await rateLimitService.recordFailedAttempt(identifier);
@@ -252,9 +252,9 @@ export const AuthProvider = ({ children }) => {
       setAdminRole(null);
       setStudentData(null);
       navigate('/login');
-      toast.success('Logged out');
+      swal.success('Logged Out', 'You have been logged out successfully.');
     } catch {
-      toast.error('Error logging out');
+      swal.error('Error', 'Failed to log out. Please try again.');
     }
   };
 
@@ -279,9 +279,9 @@ export const AuthProvider = ({ children }) => {
         });
       }
 
-      toast.success('Registration successful!');
+      swal.success('Registration Successful', 'Your account has been created successfully!');
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Registration Failed', getUserFriendlyError(error));
       throw error;
     }
   };

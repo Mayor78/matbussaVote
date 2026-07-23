@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
-import toast from 'react-hot-toast';
 import { ArrowLeft, Mail, Send, CheckCircle } from 'lucide-react';
+import swal from '../utils/swal';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -13,7 +13,7 @@ const ForgotPassword = () => {
 
   const sendResetEmail = async () => {
     if (!email.trim()) {
-      toast.error('Please enter your email address');
+      swal.error('Email Required', 'Please enter your email address');
       return;
     }
 
@@ -21,7 +21,7 @@ const ForgotPassword = () => {
     try {
       await sendPasswordResetEmail(auth, email.trim().toLowerCase());
       setSent(true);
-      toast.success('Password reset email sent!');
+      swal.success('Email Sent', 'Password reset email has been sent. Please check your inbox.');
     } catch (error) {
       if (error.code === 'auth/user-not-found') {
         const allStudents = await getDocs(collection(db, 'students'));
@@ -34,18 +34,18 @@ const ForgotPassword = () => {
           try {
             await sendPasswordResetEmail(auth, email.trim().toLowerCase());
             setSent(true);
-            toast.success('Password reset email sent!');
+            swal.success('Email Sent', 'Password reset email has been sent. Please check your inbox.');
             return;
           } catch {}
         }
 
-        toast.error('No account found with this email address.');
+        swal.error('Account Not Found', 'No account found with this email address.');
       } else if (error.code === 'auth/too-many-requests') {
-        toast.error('Too many requests. Please wait a moment and try again.');
+        swal.error('Too Many Requests', 'Please wait a moment and try again.');
       } else if (error.code === 'auth/invalid-email') {
-        toast.error('Please enter a valid email address.');
+        swal.error('Invalid Email', 'Please enter a valid email address.');
       } else {
-        toast.error('Failed to send reset email. Please try again.');
+        swal.error('Error', 'Failed to send reset email. Please try again.');
       }
     } finally {
       setLoading(false);

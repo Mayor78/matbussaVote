@@ -4,7 +4,7 @@ import { usePositions } from '../../hooks/usePositions';
 import Button from '../Button';
 import { positionSchema } from '../../utils/schemas';
 import { getUserFriendlyError } from '../../utils/errors';
-import toast from 'react-hot-toast';
+import swal from '../../utils/swal';
 
 export const PositionForm = ({ electionId, position = null, onSuccess, onCancel }) => {
   const { createPosition, updatePosition } = usePositions(electionId);
@@ -45,7 +45,7 @@ export const PositionForm = ({ electionId, position = null, onSuccess, onCancel 
       }
       onSuccess();
     } catch (error) {
-      toast.error(getUserFriendlyError(error));
+      swal.error('Error', getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }

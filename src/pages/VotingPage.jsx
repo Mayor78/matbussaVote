@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '../lib/firebase';
 import { collection, query, where, getDocs, getDoc, runTransaction, doc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, Clock } from 'lucide-react';
 import Modal from '../components/Modal';
 import Button from '../components/Button';
@@ -11,6 +10,7 @@ import { auditService } from '../services/auditService';
 import { generateDeviceSignature } from '../utils/deviceFingerprint';
 import { CountdownBanner, useCountdown } from '../components/CountdownTimer';
 import { bundleService } from '../services/electionBundleService';
+import swal from '../utils/swal';
 
 const generateVoteHash = async (electionId, positionId, studentId) => {
   const payload = `${electionId}:${positionId}:${studentId}:${Date.now()}`;
@@ -73,7 +73,7 @@ const VotingPage = () => {
       setMyVotes(existing);
     } catch (err) {
       console.error('Failed to load election data:', err.code, err.message);
-      toast.error(getUserFriendlyError(err));
+      swal.error('Error', getUserFriendlyError(err));
     } finally { setLoading(false); }
   };
 
@@ -96,7 +96,7 @@ const VotingPage = () => {
           break;
         }
       }
-      if (!currentStudent) { toast.error('Student profile not found.'); navigate('/student'); return; }
+      if (!currentStudent) { swal.error('Account Error', 'Student profile not found.'); navigate('/student'); return; }
       setStudent(currentStudent);
 
       const openElectionsSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'open')));
@@ -112,7 +112,7 @@ const VotingPage = () => {
       }
     } catch (err) {
       console.error('Failed to load voting data:', err.code, err.message);
-      toast.error(getUserFriendlyError(err));
+      swal.error('Error', getUserFriendlyError(err));
     } finally { setLoading(false); }
   }, [navigate]);
 
@@ -128,7 +128,7 @@ const VotingPage = () => {
     if (!student || !selectedElection || voting) return;
 
     if (selectedElection.closesAt && Date.now() > new Date(selectedElection.closesAt).getTime()) {
-      toast.error('This election has ended. Voting is closed.');
+      swal.info('Voting Closed', 'This election has ended. Voting is closed.');
       try {
         const { doc, updateDoc } = await import('firebase/firestore');
         const { db } = await import('../lib/firebase');
@@ -187,7 +187,7 @@ const VotingPage = () => {
       localStorage.setItem(`vote_${positionId}`, voteHash);
       setActivePositionId(null);
       setSelectedCandidate(null);
-      toast.success('Vote recorded!');
+      swal.success('Vote Recorded', 'Your vote has been successfully cast.');
 
       try {
         await auditService.logAction({
@@ -205,10 +205,10 @@ const VotingPage = () => {
       } catch { /* votingStatus update is best-effort */ }
     } catch (error) {
       if (error.message === 'ALREADY_VOTED') {
-        toast.error('You already voted for this position');
+        swal.error('Already Voted', 'You have already voted for this position.');
         setMyVotes(prev => ({ ...prev, [positionId]: 'existing' }));
       } else {
-        toast.error('Vote failed. Your vote was NOT recorded. Please try again.');
+        swal.error('Vote Failed', 'Your vote was NOT recorded. Please try again.');
         setMyVotes(prev => {
           const updated = { ...prev };
           delete updated[positionId];

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { authCodeService } from '../services/authCodeService';
 import { Key, X } from 'lucide-react';
-import toast from 'react-hot-toast';
+import swal from '../utils/swal';
 import Button from './Button';
 
 const AuthCodeModal = ({ isOpen, onClose, action, target = '', onAuthorized }) => {
@@ -25,15 +25,15 @@ const AuthCodeModal = ({ isOpen, onClose, action, target = '', onAuthorized }) =
     try {
       const result = await authCodeService.validateAndConsume(code.trim().toUpperCase(), action);
       if (!result.valid) {
-        toast.error(result.error);
+        swal.error('Error', result.error);
         return;
       }
-      toast.success('Code validated!');
+      swal.success('Success', 'Code validated!');
       onAuthorized(result.data);
       setCode('');
       onClose();
     } catch {
-      toast.error('Failed to validate code');
+      swal.error('Error', 'Failed to validate code');
     } finally {
       setChecking(false);
     }
