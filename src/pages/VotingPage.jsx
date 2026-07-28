@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '../lib/firebase';
 import { collection, query, where, getDocs, getDoc, runTransaction, doc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, Clock } from 'lucide-react';
 import Modal from '../components/Modal';
 import Button from '../components/Button';
@@ -32,6 +33,8 @@ const VotingPage = () => {
   const [myVotes, setMyVotes] = useState({});
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [activePositionId, setActivePositionId] = useState(null);
+  const { isAdminUser } = useAuth();
+  const dashboardPath = isAdminUser ? '/admin' : '/student';
   const navigate = useNavigate();
 
   const loadElectionData = async (electionId, studentId) => {
@@ -89,6 +92,7 @@ const VotingPage = () => {
         const data = { id: d.id, ...d.data() };
         if (data.email?.toLowerCase() === user.email?.toLowerCase()) {
           currentStudent = {
+            id: d.id,
             ...data,
             fullName: data.fullName || data.full_name || '',
             matricNumber: data.matricNumber || data.matric_number || '',
@@ -96,7 +100,17 @@ const VotingPage = () => {
           break;
         }
       }
-      if (!currentStudent) { swal.error('Account Error', 'Student profile not found.'); navigate('/student'); return; }
+
+      if (!currentStudent && isAdminUser) {
+        currentStudent = {
+          id: user.uid,
+          fullName: user.email?.split('@')[0] || 'Admin',
+          matricNumber: 'ADMIN_ACCOUNT',
+          email: user.email?.toLowerCase() || '',
+        };
+      }
+
+      if (!currentStudent) { swal.error('Account Error', 'Student profile not found.'); navigate(dashboardPath); return; }
       setStudent(currentStudent);
 
       const openElectionsSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'open')));
@@ -114,7 +128,7 @@ const VotingPage = () => {
       console.error('Failed to load voting data:', err.code, err.message);
       swal.error('Error', getUserFriendlyError(err));
     } finally { setLoading(false); }
-  }, [navigate]);
+  }, [navigate, dashboardPath, isAdminUser]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -241,7 +255,7 @@ const VotingPage = () => {
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
       <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <button onClick={() => selectedElection ? setSelectedElection(null) : navigate('/student')}
+        <button onClick={() => selectedElection ? setSelectedElection(null) : navigate(dashboardPath)}
           className="flex items-center gap-1.5 text-[#4B5563] hover:text-[#1F3A5C] mb-5 text-sm font-semibold transition-colors">
           <ArrowLeft className="w-4 h-4" /> {selectedElection ? 'Choose another election' : 'Back to dashboard'}
         </button>
@@ -407,9 +421,9 @@ const VotingPage = () => {
                             <div className="flex-shrink-0">
                               {candidate.photoUrl ? (
                                 <img src={candidate.photoUrl} alt={candidate.fullName}
-                                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-[#E2E5EA]" />
+                                  className="w-80 h-80 sm:w-70 sm:h-70 rounded-2xl object-cover border border-[#E2E5EA]" />
                               ) : (
-                                <div className="w-24 h-24 sm:w-28 sm:h-28 bg-[#EEF1F4] rounded-2xl flex items-center justify-center border border-[#E2E5EA]">
+                                <div className="w-80 h-80 sm:w-68 sm:h-68 bg-[#EEF1F4] rounded-2xl flex items-center justify-center border border-[#E2E5EA]">
                                   <User className="w-12 h-12 sm:w-14 sm:h-14 text-[#98A2B3]" />
                                 </div>
                               )}
@@ -449,7 +463,7 @@ const VotingPage = () => {
             {allVoted && (
               <div className="text-center pt-3">
                 <button
-                  onClick={() => navigate('/student/confirmation')}
+                  onClick={() => navigate(isAdminUser ? '/admin' : '/student/confirmation')}
                   className="inline-flex items-center gap-2 px-10 py-4 bg-[#1F7A54] hover:bg-[#155C40] text-white text-lg font-bold rounded-2xl shadow-md transition-colors"
                 >
                   <CheckCircle className="w-5 h-5" />
@@ -472,9 +486,9 @@ const VotingPage = () => {
               <div className="text-center">
                 {selectedCandidate.photoUrl ? (
                   <img src={selectedCandidate.photoUrl} alt=""
-                    className="w-32 h-32 sm:w-36 sm:h-36 rounded-2xl object-cover mx-auto border-2 border-[#1F3A5C]" />
+                    className="w-80 h-80 sm:w-36 sm:h-36 rounded-2xl object-cover mx-auto border-2 border-[#1F3A5C]" />
                 ) : (
-                  <div className="w-32 h-32 sm:w-36 sm:h-36 bg-[#EEF1F4] rounded-2xl mx-auto flex items-center justify-center border-2 border-[#1F3A5C]">
+                  <div className="w-80 h-80 sm:w-36 sm:h-36 bg-[#EEF1F4] rounded-2xl mx-auto flex items-center justify-center border-2 border-[#1F3A5C]">
                     <User className="w-16 h-16 text-[#98A2B3]" />
                   </div>
                 )}

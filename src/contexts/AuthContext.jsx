@@ -18,6 +18,7 @@ export const AuthProvider = ({ children }) => {
   const [adminRole, setAdminRole] = useState(null);
   const [studentData, setStudentData] = useState(null);
   const freshLogin = useRef(false);
+  const loginFallbackRef = useRef(null);
   const sessionTimer = useRef(null);
   const lastActivityRef = useRef(0);
   const navigate = useNavigate();
@@ -67,6 +68,7 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (!firebaseUser) {
+          if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
           setUser(null);
           setIsAdminUser(false);
           setAdminRole(null);
@@ -98,19 +100,17 @@ export const AuthProvider = ({ children }) => {
           setAdminRole(foundAdmin.role);
           setStudentData(null);
 
-          try {
-            const accessRef = doc(db, 'adminAccess', firebaseUser.uid);
-            await setDoc(accessRef, {
-              email: userEmail,
-              role: foundAdmin.role,
-              updatedAt: new Date().toISOString(),
-            }, { merge: true });
-          } catch (e) {
+          setDoc(doc(db, 'adminAccess', firebaseUser.uid), {
+            email: userEmail,
+            role: foundAdmin.role,
+            updatedAt: new Date().toISOString(),
+          }, { merge: true }).catch(e => {
             if (import.meta.env.DEV) console.error('[Auth] Failed to sync admin access marker:', e);
-          }
+          });
           setLoading(false);
 
           if (freshLogin.current) {
+            if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
             freshLogin.current = false;
             setTimeout(() => navigate('/admin', { replace: true }), 0);
           }
@@ -149,15 +149,18 @@ export const AuthProvider = ({ children }) => {
           setLoading(false);
 
           if (freshLogin.current) {
+            if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
             freshLogin.current = false;
             setTimeout(() => navigate('/student', { replace: true }), 0);
           }
         } catch {
           if (import.meta.env.DEV) console.error('[Auth] Failed to load student data');
+          if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
           setLoading(false);
         }
       } catch (error) {
         if (import.meta.env.DEV) console.error('[Auth] Unexpected error:', error);
+        if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
         setLoading(false);
       }
     });
@@ -228,6 +231,15 @@ export const AuthProvider = ({ children }) => {
 
       try { await rateLimitService.resetRateLimit(identifier); } catch { /* best-effort */ }
       swal.success('Login Successful', 'Welcome back!');
+
+      if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
+      loginFallbackRef.current = setTimeout(() => {
+        if (freshLogin.current) {
+          freshLogin.current = false;
+          navigate(isAdminLogin ? '/admin' : '/student', { replace: true });
+        }
+        loginFallbackRef.current = null;
+      }, 4000);
     } catch (error) {
       if (error.message === 'Student not found' || error.message === 'Not registered' || error.message === 'Device already bound') {
         throw error;

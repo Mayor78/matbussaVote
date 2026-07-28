@@ -19,6 +19,7 @@ const AdminLayout = () => {
     { name: 'Elections', href: '/admin/elections', icon: Vote },
     { name: 'Candidates', href: '/admin/candidates', icon: Users },
     { name: 'Students', href: '/admin/students', icon: UserPlus },
+    { name: 'Vote', href: '/admin/vote', icon: Vote },
     { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
     { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileText },
     ...(isSuperAdmin ? [{ name: 'Manage Admins', href: '/admin/manage-admins', icon: Shield }] : []),

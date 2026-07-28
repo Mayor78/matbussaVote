@@ -69,6 +69,7 @@ function App() {
               <Route path="candidates" element={<Suspense fallback={<PageLoader />}><CandidateManagement /></Suspense>} />
               <Route path="students" element={<Suspense fallback={<PageLoader />}><StudentManagement /></Suspense>} />
               <Route path="analytics" element={<Suspense fallback={<PageLoader />}><Analytics /></Suspense>} />
+              <Route path="vote" element={<Suspense fallback={<PageLoader />}><VotingPage /></Suspense>} />
               <Route path="audit-logs" element={<Suspense fallback={<PageLoader />}><AuditLogs /></Suspense>} />
               <Route path="manage-admins" element={<Suspense fallback={<PageLoader />}><AdminManagement /></Suspense>} />
             </Route>

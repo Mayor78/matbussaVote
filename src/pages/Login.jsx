@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff, LogIn, UserCheck, Lock, Mail, ShieldAlert } from 'lucide-react';
@@ -13,6 +13,13 @@ const Login = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
+  const uiRecoveryRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (uiRecoveryRef.current) clearTimeout(uiRecoveryRef.current);
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,6 +38,12 @@ const Login = () => {
     try {
       await login(identifier.trim(), password, isAdminLogin);
       setLoginSuccess(true);
+      if (uiRecoveryRef.current) clearTimeout(uiRecoveryRef.current);
+      uiRecoveryRef.current = setTimeout(() => {
+        setLoginSuccess(false);
+        setLoading(false);
+        uiRecoveryRef.current = null;
+      }, 5000);
     } catch (err) {
       setLoading(false);
       if (err.message !== 'Rate limited' && err.message !== 'Student not found' && err.message !== 'Not registered') {
@@ -139,7 +152,7 @@ const Login = () => {
               )}
             </button>
 
-            <div className="pt-2">
+            {/* <div className="pt-2">
               <button
                 type="button"
                 onClick={toggleMode}
@@ -148,10 +161,10 @@ const Login = () => {
                 <ShieldAlert className="w-4 h-4 text-indigo-600" />
                 <span>{isAdminLogin ? 'Switch to Student Login' : 'Switch to Admin Login'}</span>
               </button>
-            </div>
+            </div> */}
 
             {!isAdminLogin && (
-              <div className="pt-6 border-t border-slate-100 text-center">
+              <div className="pt-2 border-t border-slate-100 text-center">
                 <p className="text-sm text-slate-500 mb-3">Don't have a voting account yet?</p>
                 <Link
                   to="/register"
