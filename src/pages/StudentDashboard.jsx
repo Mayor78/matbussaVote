@@ -3,7 +3,30 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { Vote, Clock, AlertCircle, LogOut, CheckCircle, Trophy, User, Medal } from 'lucide-react';
+import {
+  Vote, Clock, AlertCircle, LogOut, CheckCircle, Trophy, User, Medal,
+  Lock, ChevronDown, ChevronUp, Share2,
+} from 'lucide-react';
+
+// Counts up from 0 to `value` once on mount/whenever value changes.
+// Used for vote counts and summary stats so the results reveal feels alive
+// without going overboard (~900ms, no bounce/confetti).
+const AnimatedNumber = ({ value, duration = 900 }) => {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let startTs = null;
+    let raf;
+    const step = (ts) => {
+      if (startTs === null) startTs = ts;
+      const progress = Math.min((ts - startTs) / duration, 1);
+      setDisplay(Math.round(progress * value));
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  return <>{display}</>;
+};
 
 const StudentDashboard = () => {
   const { user, studentData: ctxStudent, loading: authLoading, logout, isAdminUser } = useAuth();
@@ -11,6 +34,9 @@ const StudentDashboard = () => {
   const [election, setElection] = useState(null);
   const [progress, setProgress] = useState({ voted: 0, total: 0 });
   const [results, setResults] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [expanded, setExpanded] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -21,6 +47,7 @@ const StudentDashboard = () => {
         const el = { id: openSnap.docs[0].id, ...openSnap.docs[0].data() };
         setElection(el);
         setResults(null);
+        setSummary(null);
 
         const pSnap = await getDocs(query(collection(db, 'positions'), where('electionId', '==', el.id)));
         const total = pSnap.size;
@@ -35,17 +62,22 @@ const StudentDashboard = () => {
       }
 
       const closedSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'closed')));
-      if (closedSnap.empty) { setElection(null); setResults(null); return; }
+      if (closedSnap.empty) { setElection(null); setResults(null); setSummary(null); return; }
 
       const closed = closedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       closed.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
       const el = closed[0];
       setElection(el);
 
-      const [pSnap, cSnap, vSnap] = await Promise.all([
+      // pSnap/cSnap/vSnap = this election's positions, candidates, and this
+      // student's own votes (unchanged from before). allVotesSnap/studentsSnap
+      // are new — needed for the election-wide summary (turnout, votes cast).
+      const [pSnap, cSnap, vSnap, allVotesSnap, studentsSnap] = await Promise.all([
         getDocs(query(collection(db, 'positions'), where('electionId', '==', el.id))),
         getDocs(query(collection(db, 'candidates'), where('electionId', '==', el.id))),
         getDocs(query(collection(db, 'votes'), where('electionId', '==', el.id), where('studentId', '==', studentId))),
+        getDocs(query(collection(db, 'votes'), where('electionId', '==', el.id))),
+        getDocs(collection(db, 'students')),
       ]);
 
       const positions = pSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -66,7 +98,17 @@ const StudentDashboard = () => {
       }));
 
       setResults(resultsData);
+      setExpanded(Object.fromEntries(resultsData.map(p => [p.id, true])));
       setProgress({ voted: 0, total: 0 });
+
+      // Election-wide summary: registered voters, unique voters, turnout, ballots.
+      const allVotes = allVotesSnap.docs.map(d => d.data());
+      const uniqueVoters = new Set(allVotes.map(v => v.studentId)).size;
+      const totalBallots = allVotes.length;
+      const allStudents = studentsSnap.docs.map(d => d.data());
+      const registeredCount = allStudents.filter(s => s.registeredStatus || s.registered_status).length;
+      const turnoutPct = registeredCount > 0 ? Math.round((uniqueVoters / registeredCount) * 100) : 0;
+      setSummary({ registeredCount, uniqueVoters, totalBallots, turnoutPct });
     } catch (err) {
       console.error('Error fetching election:', err);
     }
@@ -96,6 +138,23 @@ const StudentDashboard = () => {
       setLoading(false);
     }
   }, [authLoading, ctxStudent, user, fetchData, isAdminUser, navigate]);
+
+  const togglePosition = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const shareResult = async (position, winner, pct) => {
+    const text = `🏆 ${winner.fullName} won ${position.title} in the ${election.title} with ${winner.voteCount} votes (${pct}%)!`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Election result', text });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setCopiedId(position.id);
+        setTimeout(() => setCopiedId(null), 2000);
+      }
+    } catch {
+      // user closed the share sheet — nothing to do
+    }
+  };
 
   if (authLoading || loading) {
     return (
@@ -232,142 +291,194 @@ const StudentDashboard = () => {
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-1">{election.title}</h2>
               <p className="text-[#B7E3CC] text-sm font-medium">{election.academicSession || election.academic_session}</p>
-              <p className="text-[#DDF2E6] text-[11px] mt-3 font-bold uppercase tracking-widest">Final results</p>
+              <div className="inline-flex items-center gap-1.5 mt-3 bg-white/10 rounded-full px-3.5 py-1.5">
+                <Lock className="w-3 h-3 text-[#DDF2E6]" />
+                <p className="text-[#DDF2E6] text-[11px] font-bold uppercase tracking-widest">Final results</p>
+              </div>
             </div>
 
+            {/* Election summary */}
+            {summary && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm p-4 text-center">
+                  <p className="text-2xl font-extrabold text-[#1F3A5C] font-mono tabular-nums"><AnimatedNumber value={summary.registeredCount} /></p>
+                  <p className="text-[11px] text-[#8A93A3] font-semibold uppercase tracking-wide mt-1">Registered voters</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm p-4 text-center">
+                  <p className="text-2xl font-extrabold text-[#1F7A54] font-mono tabular-nums"><AnimatedNumber value={summary.uniqueVoters} /></p>
+                  <p className="text-[11px] text-[#8A93A3] font-semibold uppercase tracking-wide mt-1">Votes cast</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm p-4 text-center">
+                  <p className="text-2xl font-extrabold text-[#B8862E] font-mono tabular-nums"><AnimatedNumber value={summary.turnoutPct} />%</p>
+                  <p className="text-[11px] text-[#8A93A3] font-semibold uppercase tracking-wide mt-1">Turnout</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm p-4 text-center">
+                  <p className="text-2xl font-extrabold text-[#7C3AED] font-mono tabular-nums"><AnimatedNumber value={summary.totalBallots} /></p>
+                  <p className="text-[11px] text-[#8A93A3] font-semibold uppercase tracking-wide mt-1">Valid votes</p>
+                </div>
+              </div>
+            )}
+
             {results.map((position) => {
-              const winner = position.candidates[0];
               const totalVotes = position.candidates.reduce((sum, c) => sum + c.voteCount, 0);
               const positionHasVote = !!position.myVote;
+              const winner = position.candidates[0];
+              const runnerUp = position.candidates[1];
+              const hasVotes = totalVotes > 0;
+              const isTie = hasVotes && !!runnerUp && runnerUp.voteCount === winner.voteCount;
+              const winnerPct = hasVotes ? Math.round((winner.voteCount / totalVotes) * 100) : 0;
+              const margin = hasVotes && runnerUp ? winner.voteCount - runnerUp.voteCount : null;
+              const marginPct = hasVotes && runnerUp ? winnerPct - Math.round((runnerUp.voteCount / totalVotes) * 100) : null;
+              const isOpen = expanded[position.id] !== false;
+              const otherCandidates = position.candidates.slice(1);
 
               return (
                 <div key={position.id} className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm overflow-hidden">
-                  {/* Position header */}
-                  <div className="px-5 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-extrabold text-[#1C2430] truncate">{position.title}</h3>
-                        {position.description && (
-                          <p className="text-[#8A93A3] text-xs mt-0.5">{position.description}</p>
-                        )}
-                      </div>
-                      <span className="text-xs font-bold text-[#4B5563] bg-[#EEF1F4] px-2.5 py-1.5 rounded-full whitespace-nowrap font-mono tabular-nums">
-                        {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
-                      </span>
+                  {/* Header — tap to collapse/expand; winner is visible even collapsed */}
+                  <button
+                    onClick={() => togglePosition(position.id)}
+                    className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left"
+                  >
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-extrabold text-[#1C2430] truncate">{position.title}</h3>
+                      {hasVotes ? (
+                        <p className="text-[#8A93A3] text-xs mt-0.5 truncate">
+                          <span className="font-semibold text-[#B8862E]">🏆 {winner.fullName}</span>
+                          <span className="mx-1">·</span>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}
+                        </p>
+                      ) : (
+                        <p className="text-[#8A93A3] text-xs mt-0.5">No votes cast</p>
+                      )}
                     </div>
-                  </div>
+                    {isOpen ? <ChevronUp className="w-5 h-5 text-[#98A2B3] flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-[#98A2B3] flex-shrink-0" />}
+                  </button>
 
-                  {/* Ticket-stub divider — signature motif */}
-                  <div className="relative flex items-center px-5">
-                    <div className="w-3 h-3 rounded-full bg-[#F5F6F8] border border-[#E2E5EA] -ml-[26px]"></div>
-                    <div className="flex-1 border-t-2 border-dashed border-[#E2E5EA]"></div>
-                    <div className="w-3 h-3 rounded-full bg-[#F5F6F8] border border-[#E2E5EA] -mr-[26px]"></div>
-                  </div>
-
-                  {/* Winner — standout card */}
-                  {winner && (
-                    <div className="mx-4 mt-4 bg-[#B8862E] rounded-2xl p-5 text-white shadow-md">
-                      <div className="flex items-center justify-center gap-2 mb-3.5">
-                        <Medal className="w-4 h-4" />
-                        <span className="text-xs font-extrabold uppercase tracking-[0.2em]">Winner</span>
-                        <Trophy className="w-4 h-4" />
+                  {isOpen && (
+                    <div>
+                      {/* Ticket-stub divider — signature motif */}
+                      <div className="relative flex items-center px-5">
+                        <div className="w-3 h-3 rounded-full bg-[#F5F6F8] border border-[#E2E5EA] -ml-[26px]"></div>
+                        <div className="flex-1 border-t-2 border-dashed border-[#E2E5EA]"></div>
+                        <div className="w-3 h-3 rounded-full bg-[#F5F6F8] border border-[#E2E5EA] -mr-[26px]"></div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {winner.photoUrl ? (
-                          <img src={winner.photoUrl} alt="" className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-white/40 flex-shrink-0 shadow-sm" />
-                        ) : (
-                          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white/15 rounded-2xl flex items-center justify-center flex-shrink-0 border-2 border-white/25">
-                            <User className="w-10 h-10 sm:w-12 sm:h-12 text-white/80" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xl sm:text-2xl font-extrabold truncate">{winner.fullName}</p>
-                          <p className="text-[#F3E3C4] text-sm font-medium">{winner.level}</p>
-                          <div className="flex items-baseline gap-1.5 mt-1.5 font-mono tabular-nums">
-                            <span className="text-2xl sm:text-3xl font-black">{winner.voteCount}</span>
-                            <span className="text-[#F3E3C4] text-sm font-semibold">vote{winner.voteCount !== 1 ? 's' : ''}</span>
-                          </div>
-                        </div>
-                        {position.myVote === winner.id && (
-                          <div className="flex items-center gap-1.5 bg-white/20 rounded-xl px-3 py-2 flex-shrink-0">
-                            <CheckCircle className="w-4 h-4" />
-                            <span className="text-xs font-bold">Your vote</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
-                  {/* All candidates list */}
-                  <div className="px-4 py-4 space-y-2">
-                    {position.candidates.map((candidate, idx) => {
-                      const isWinner = idx === 0;
-                      const isMyVote = position.myVote === candidate.id;
-                      const maxVotes = position.candidates[0]?.voteCount || 1;
-                      const candPct = totalVotes > 0 ? Math.round((candidate.voteCount / totalVotes) * 100) : 0;
-
-                      return (
-                        <div
-                          key={candidate.id}
-                          className={`flex items-center gap-3 rounded-xl p-3 border ${
-                            isWinner ? 'bg-[#FBF4E4] border-[#EED8AE]' :
-                            isMyVote ? 'bg-[#EAF6EF] border-[#BFE3D0]' :
-                            'bg-[#FAFAFB] border-[#EDEFF2]'
-                          }`}
-                        >
-                          {/* Rank badge */}
-                          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                            idx === 0 ? 'bg-[#B8862E] text-white' :
-                            idx === 1 ? 'bg-[#94A3B8] text-white' :
-                            idx === 2 ? 'bg-[#8B5E2B] text-white' :
-                            'bg-[#D9DEE5] text-[#5B6472]'
-                          }`}>
-                            {idx === 0 ? <Trophy className="w-3.5 h-3.5" /> : idx + 1}
-                          </span>
-
-                          {/* Photo */}
-                          {candidate.photoUrl ? (
-                            <img src={candidate.photoUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                          ) : (
-                            <div className="w-10 h-10 bg-[#EEF1F4] rounded-lg flex items-center justify-center flex-shrink-0">
-                              <User className="w-5 h-5 text-[#98A2B3]" />
+                      {!hasVotes ? (
+                        <p className="text-xs text-[#98A2B3] text-center py-8 font-medium">No votes were cast for this position.</p>
+                      ) : (
+                        <>
+                          {/* Winner spotlight — the "victory card" */}
+                          <div className="mx-4 mt-4 bg-white border-2 border-[#B8862E] rounded-2xl p-5 shadow-sm">
+                            <div className="flex items-center justify-center gap-2 mb-3.5">
+                              <Trophy className="w-4 h-4 text-[#B8862E]" />
+                              <span className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#B8862E]">{isTie ? 'Leading (tied)' : 'Winner'}</span>
+                              <Trophy className="w-4 h-4 text-[#B8862E]" />
                             </div>
-                          )}
-
-                          {/* Name + level */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-bold text-[#1C2430] truncate">{candidate.fullName}</p>
-                              {isMyVote && (
-                                <span className="text-[10px] bg-[#1F7A54] text-white px-1.5 py-0.5 rounded font-bold flex-shrink-0">YOU VOTED</span>
+                            <div className="flex flex-col items-center text-center">
+                              {winner.photoUrl ? (
+                                <img src={winner.photoUrl} alt="" className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-[#B8862E] shadow-sm" />
+                              ) : (
+                                <div className="w-24 h-24 sm:w-28 sm:h-28 bg-[#FBF4E4] rounded-2xl flex items-center justify-center border-2 border-[#B8862E]">
+                                  <User className="w-12 h-12 text-[#B8862E]" />
+                                </div>
+                              )}
+                              <p className="text-xl sm:text-2xl font-extrabold text-[#1C2430] mt-3">{winner.fullName}</p>
+                              <p className="text-[#8A93A3] text-sm font-medium">{winner.level}</p>
+                              <div className="flex items-baseline gap-1.5 mt-2 font-mono tabular-nums">
+                                <span className="text-3xl sm:text-4xl font-black text-[#B8862E]"><AnimatedNumber value={winner.voteCount} /></span>
+                                <span className="text-[#8A93A3] text-sm font-semibold">votes · {winnerPct}%</span>
+                              </div>
+                              {!isTie && margin !== null && runnerUp && (
+                                <p className="text-xs text-[#667085] font-semibold mt-1.5">
+                                  Won by {margin} vote{margin !== 1 ? 's' : ''} <span className="text-[#98A2B3] font-medium">({marginPct}% lead)</span>
+                                </p>
+                              )}
+                              {!runnerUp && <p className="text-xs text-[#667085] font-semibold mt-1.5">Unopposed</p>}
+                              {position.myVote === winner.id && (
+                                <div className="flex items-center gap-1.5 bg-[#EAF6EF] rounded-full px-3 py-1.5 mt-3">
+                                  <CheckCircle className="w-3.5 h-3.5 text-[#1F7A54]" />
+                                  <span className="text-xs font-bold text-[#155C40]">Your vote</span>
+                                </div>
                               )}
                             </div>
-                            <p className="text-xs text-[#8A93A3] font-medium">{candidate.level}</p>
+
+                            <button
+                              onClick={() => shareResult(position, winner, winnerPct)}
+                              className="mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 bg-[#1C2430] hover:bg-[#0F141C] text-white rounded-xl text-xs font-bold transition-colors"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                              {copiedId === position.id ? 'Copied to clipboard' : 'Share result'}
+                            </button>
                           </div>
 
-                          {/* Vote count + bar */}
-                          <div className="text-right flex-shrink-0 min-w-[76px]">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="flex-1 max-w-[50px]">
-                                <div className="w-full bg-[#E5E7EB] rounded-full h-1.5">
-                                  <div
-                                    className={`h-1.5 rounded-full ${isWinner ? 'bg-[#B8862E]' : isMyVote ? 'bg-[#1F7A54]' : 'bg-[#98A2B3]'}`}
-                                    style={{ width: `${maxVotes > 0 ? (candidate.voteCount / maxVotes) * 100 : 0}%` }}
-                                  ></div>
-                                </div>
+                          {/* Other candidates — ranked, animated bars, medals for 2nd/3rd */}
+                          {otherCandidates.length > 0 && (
+                            <div className="px-4 sm:px-5 pt-4 pb-5">
+                              <p className="text-[10px] font-bold text-[#8A93A3] uppercase tracking-widest mb-3">Other candidates</p>
+                              <div className="space-y-3">
+                                {otherCandidates.map((candidate, i) => {
+                                  const rank = i + 2;
+                                  const isMyVote = position.myVote === candidate.id;
+                                  const candPct = totalVotes > 0 ? Math.round((candidate.voteCount / totalVotes) * 100) : 0;
+                                  const barColor = isMyVote ? '#1F7A54' : '#94A3B8';
+                                  return (
+                                    <div key={candidate.id} className="flex items-center gap-3">
+                                      <span className="w-6 flex-shrink-0 flex items-center justify-center">
+                                        {rank === 2 ? (
+                                          <Medal className="w-4 h-4 text-[#94A3B8]" />
+                                        ) : rank === 3 ? (
+                                          <Medal className="w-4 h-4 text-[#B08D57]" />
+                                        ) : (
+                                          <span className="text-xs font-bold text-[#98A2B3]">{rank}</span>
+                                        )}
+                                      </span>
+                                      {candidate.photoUrl ? (
+                                        <img
+                                          src={candidate.photoUrl}
+                                          alt=""
+                                          className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                                          style={{ border: `2px solid ${isMyVote ? '#1F7A54' : '#E2E5EA'}` }}
+                                        />
+                                      ) : (
+                                        <div
+                                          className="w-9 h-9 bg-[#EEF1F4] rounded-full flex items-center justify-center flex-shrink-0"
+                                          style={{ border: `2px solid ${isMyVote ? '#1F7A54' : '#E2E5EA'}` }}
+                                        >
+                                          <User className="w-4 h-4 text-[#98A2B3]" />
+                                        </div>
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="text-sm font-bold text-[#1C2430] truncate">{candidate.fullName}</span>
+                                            {isMyVote && (
+                                              <span className="text-[9px] bg-[#1F7A54] text-white px-1.5 py-0.5 rounded font-bold flex-shrink-0">YOU</span>
+                                            )}
+                                          </div>
+                                          <span className="text-xs font-extrabold text-[#1C2430] font-mono tabular-nums flex-shrink-0">
+                                            <AnimatedNumber value={candidate.voteCount} /> <span className="text-[#98A2B3] font-semibold">({candPct}%)</span>
+                                          </span>
+                                        </div>
+                                        <div className="w-full bg-[#EEF1F4] rounded-full h-2 overflow-hidden">
+                                          <div
+                                            className="h-2 rounded-full transition-all duration-700"
+                                            style={{ width: `${candPct}%`, backgroundColor: barColor }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                              <span className="text-sm font-extrabold text-[#1C2430] w-8 text-right font-mono tabular-nums">{candidate.voteCount}</span>
                             </div>
-                            <p className="text-[11px] text-[#98A2B3] font-medium font-mono tabular-nums">{candPct}%</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                          )}
+                        </>
+                      )}
 
-                    {!positionHasVote && (
-                      <p className="text-xs text-[#98A2B3] text-center pt-1 font-medium">You did not vote for this position</p>
-                    )}
-                  </div>
+                      {!positionHasVote && hasVotes && (
+                        <p className="text-xs text-[#98A2B3] text-center pb-4 font-medium">You did not vote for this position</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
