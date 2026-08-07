@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs, runTransaction, doc, updateDoc } from 'firebase/firestore';
+import { auth } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { getUserFriendlyError } from '../utils/errors';
 import { auditService } from '../services/auditService';
-import { generateDeviceSignature } from '../utils/deviceFingerprint';
 import { CountdownBanner } from '../components/CountdownTimer';
-import { bundleService } from '../services/electionBundleService';
+import * as api from '../lib/api';
 import swal from '../utils/swal';
 
 function hashCode(str) {
@@ -31,15 +29,6 @@ function seededShuffle(array, seed) {
   return shuffled;
 }
 
-const generateVoteHash = async (electionId, positionId, studentId) => {
-  const payload = `${electionId}:${positionId}:${studentId}:${Date.now()}`;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return 'v_' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
 const VotingPage = () => {
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
@@ -54,46 +43,39 @@ const VotingPage = () => {
   const [votingCandidateId, setVotingCandidateId] = useState(null);
   const [expandedManifesto, setExpandedManifesto] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
-  const { isAdminUser } = useAuth();
+  const { isAdminUser, studentData } = useAuth();
   const dashboardPath = isAdminUser ? '/admin' : '/student';
   const navigate = useNavigate();
 
   const loadElectionData = async (electionId, studentId) => {
     setLoading(true);
     try {
+      const bundle = await api.fetchBundle(electionId);
+
       let positionsList;
       let candidatesList;
 
-      const bundle = await bundleService.getBundle(electionId);
-      if (bundle && bundle.positions) {
-        positionsList = bundle.positions.map(p => ({
-          id: p.id, title: p.title, description: p.description, displayOrder: p.displayOrder,
+      if (bundle && Array.isArray(bundle)) {
+        positionsList = bundle.map(p => ({
+          id: p.id, title: p.title, description: p.description || '', displayOrder: p.displayOrder,
         }));
-        candidatesList = bundle.positions.flatMap(p =>
+        candidatesList = bundle.flatMap(p =>
           (p.candidates || []).map(c => ({ ...c, positionId: p.id }))
         );
       } else {
-        const [posSnap, candSnap] = await Promise.all([
-          getDocs(query(collection(db, 'positions'), where('electionId', '==', electionId))),
-          getDocs(query(collection(db, 'candidates'), where('electionId', '==', electionId))),
+        const [posData, candData] = await Promise.all([
+          api.fetchPositions(electionId),
+          api.fetchCandidates({ electionId }),
         ]);
-        positionsList = posSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        positionsList = posData;
         positionsList.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
-        candidatesList = candSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        bundleService.buildBundle(electionId).catch(() => {});
+        candidatesList = candData;
+        api.buildBundle(electionId).catch(() => {});
       }
 
-      const voteSnap = await getDocs(query(
-        collection(db, 'votes'),
-        where('electionId', '==', electionId),
-        where('studentId', '==', studentId)
-      ));
-
+      const { votes } = await api.checkVoteStatus(studentId, electionId);
       const existing = {};
-      voteSnap.docs.forEach(d => {
-        const v = d.data();
-        existing[v.positionId] = v.candidateId;
-      });
+      (votes || []).forEach(v => { existing[v.positionId] = v.candidateId; });
 
       const seed = hashCode(`${studentId}_${electionId}`);
       const randomized = {};
@@ -110,7 +92,7 @@ const VotingPage = () => {
       const firstUnvoted = positionsList.findIndex(p => !existing[p.id]);
       setActivePositionIdx(firstUnvoted >= 0 ? firstUnvoted : 0);
     } catch (err) {
-      console.error('Failed to load election data:', err.code, err.message);
+      console.error('Failed to load election data:', err);
       swal.error('Error', getUserFriendlyError(err));
     } finally {
       setLoading(false);
@@ -123,19 +105,15 @@ const VotingPage = () => {
       const user = auth.currentUser;
       if (!user) { navigate('/login'); return; }
 
-      const allStudents = await getDocs(collection(db, 'students'));
       let currentStudent = null;
-      for (const d of allStudents.docs) {
-        const data = { id: d.id, ...d.data() };
-        if (data.email?.toLowerCase() === user.email?.toLowerCase()) {
-          currentStudent = {
-            id: d.id,
-            ...data,
-            fullName: data.fullName || data.full_name || '',
-            matricNumber: data.matricNumber || data.matric_number || '',
-          };
-          break;
-        }
+
+      if (studentData && studentData.id) {
+        currentStudent = {
+          id: studentData.id,
+          ...studentData,
+          fullName: studentData.fullName || '',
+          matricNumber: studentData.matricNumber || '',
+        };
       }
 
       if (!currentStudent && isAdminUser) {
@@ -154,14 +132,7 @@ const VotingPage = () => {
       }
       setStudent(currentStudent);
 
-      const openElectionsSnap = await getDocs(query(
-        collection(db, 'elections'),
-        where('status', '==', 'open'),
-      ));
-      const openElections = openElectionsSnap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const openElections = await api.fetchElections('open');
       setElections(openElections);
 
       if (openElections.length === 0) {
@@ -175,12 +146,12 @@ const VotingPage = () => {
         await loadElectionData(e.id, currentStudent.id);
       }
     } catch (err) {
-      console.error('Failed to load voting data:', err.code, err.message);
+      console.error('Failed to load voting data:', err);
       swal.error('Error', getUserFriendlyError(err));
     } finally {
       setLoading(false);
     }
-  }, [navigate, dashboardPath, isAdminUser]);
+  }, [navigate, dashboardPath, isAdminUser, studentData]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -206,12 +177,7 @@ const VotingPage = () => {
     if (selectedElection.closesAt && new Date().getTime() > new Date(selectedElection.closesAt).getTime()) {
       swal.info('Voting Closed', 'This election has ended. Voting is closed.');
       try {
-        const { doc: d, updateDoc: ud } = await import('firebase/firestore');
-        const { db: ddb } = await import('../lib/firebase');
-        await ud(d(ddb, 'elections', selectedElection.id), {
-          status: 'closed',
-          updatedAt: new Date().toISOString(),
-        });
+        await api.updateElectionStatus(selectedElection.id, 'closed');
         setSelectedElection(null);
       } catch { /* ignore */ }
       return;
@@ -225,57 +191,18 @@ const VotingPage = () => {
     window.addEventListener('beforeunload', beforeUnload);
 
     try {
-      const voteHash = await generateVoteHash(selectedElection.id, positionId, student.id);
-      const deviceSignature = await generateDeviceSignature();
-      const lockRef = doc(db, 'voteLocks', `${student.id}_${positionId}`);
-
-      await runTransaction(db, async (transaction) => {
-        const lockDoc = await transaction.get(lockRef);
-        if (lockDoc.exists()) throw new Error('ALREADY_VOTED');
-
-        const checkSnap = await getDocs(query(
-          collection(db, 'votes'),
-          where('electionId', '==', selectedElection.id),
-          where('positionId', '==', positionId),
-          where('studentId', '==', student.id),
-        ));
-        if (!checkSnap.empty) throw new Error('ALREADY_VOTED');
-
-        const candidateRef = doc(db, 'candidates', candidateId);
-        const candSnap = await transaction.get(candidateRef);
-        const currentCount = (candSnap.data()?.voteCount || 0) + 1;
-        transaction.update(candidateRef, { voteCount: currentCount });
-
-        transaction.set(lockRef, {
-          electionId: selectedElection.id,
-          positionId,
-          studentId: student.id,
-          createdAt: new Date().toISOString(),
-        });
-
-        const voteRef = doc(collection(db, 'votes'));
-        transaction.set(voteRef, {
-          electionId: selectedElection.id,
-          positionId,
-          candidateId,
-          studentId: student.id,
-          voteHash,
-          deviceSignature,
-          createdAt: new Date().toISOString(),
-        });
+      await api.castVote({
+        candidateId,
+        electionId: selectedElection.id,
+        positionId,
+        studentId: student.id,
       });
 
       setMyVotes(prev => ({ ...prev, [positionId]: candidateId }));
-      localStorage.setItem(`vote_${positionId}`, voteHash);
 
       auditService.logAction({
         action: 'VOTE_CAST',
         details: `Vote recorded: election="${selectedElection.id}", position="${positionId}"`,
-      }).catch(() => {});
-
-      updateDoc(doc(db, 'students', student.id), {
-        votingStatus: true,
-        updatedAt: new Date().toISOString(),
       }).catch(() => {});
 
       setVotingCandidateId(null);
@@ -289,7 +216,7 @@ const VotingPage = () => {
       }, 1000);
     } catch (error) {
       setVotingCandidateId(null);
-      if (error.message === 'ALREADY_VOTED') {
+      if (error.status === 409 || error.message?.includes('Already voted')) {
         swal.error('Already Voted', 'You have already voted for this position.');
         setMyVotes(prev => ({ ...prev, [positionId]: 'existing' }));
       } else {
@@ -388,7 +315,6 @@ const VotingPage = () => {
         {/* ─── VOTING SCREEN ─── */}
         {selectedElection && (
           <div className="space-y-5">
-            {/* Title */}
             <div className="text-center mb-1">
               <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1C2430] tracking-tight">{selectedElection.title}</h1>
               <p className="text-[#8A93A3] text-xs font-semibold uppercase tracking-wide mt-1">
@@ -398,7 +324,6 @@ const VotingPage = () => {
 
             {selectedElection.closesAt && <CountdownBanner closesAt={selectedElection.closesAt} />}
 
-            {/* Segmented progress indicator */}
             <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm px-4 py-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-bold text-[#1C2430]">Your progress</span>
@@ -451,7 +376,6 @@ const VotingPage = () => {
 
               return (
                 <div id={`position-section-${activePositionIdx}`} className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm overflow-hidden animate-fade-in">
-                  {/* Position header */}
                   <div className="flex items-center justify-between px-5 py-4 bg-[#1F3A5C]">
                     <div className="flex items-center gap-3">
                       <span className="w-8 h-8 rounded-full bg-white/15 text-white text-sm font-extrabold flex items-center justify-center flex-shrink-0">
@@ -471,7 +395,6 @@ const VotingPage = () => {
                     )}
                   </div>
 
-                  {/* Candidates */}
                   <div className="p-4 sm:p-5">
                     {positionCandidates.length === 0 ? (
                       <div className="text-center py-10">
@@ -484,7 +407,7 @@ const VotingPage = () => {
                       <div className="bg-[#EEF3F8] border border-[#C9D6E3] rounded-xl p-6 text-center">
                         <div className="animate-spin rounded-full h-9 w-9 border-4 border-[#1F3A5C] border-t-transparent mx-auto mb-3"></div>
                         <p className="text-[#1F3A5C] font-bold text-sm">Recording your vote…</p>
-                        <p className="text-[#4B6480] text-xs mt-1 font-medium">Please wait, don't leave this page.</p>
+                        <p className="text-[#4B6480] text-xs mt-1 font-medium">Please wait, don&apos;t leave this page.</p>
                       </div>
                     ) : done ? (
                       <div className="space-y-4">
@@ -527,7 +450,6 @@ const VotingPage = () => {
                       </div>
                     ) : (
                       <>
-                        {/* Vote confirmation inline */}
                         {pendingConfirm && pendingConfirm.positionId === position.id && (
                           <div className="mb-4 bg-[#F5F8FD] border-2 border-[#1F3A5C] rounded-2xl p-4 sm:p-5 animate-fade-in">
                             <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
@@ -577,7 +499,6 @@ const VotingPage = () => {
                           </div>
                         )}
 
-                        {/* Candidate carousel */}
                         <div className="carousel-snap overflow-x-auto hide-scrollbar -mx-1 px-1">
                           <div className="flex gap-3 sm:gap-4 pb-4">
                             {positionCandidates.map(candidate => {
@@ -593,7 +514,6 @@ const VotingPage = () => {
                                       : 'border-[#E2E5EA] hover:border-[#1F3A5C] hover:shadow-lg active:scale-[0.98]'
                                   }`}
                                 >
-                                  {/* Photo */}
                                   <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#EEF1F4] border border-[#E2E5EA] mb-3">
                                     {candidate.photoUrl ? (
                                       <img src={candidate.photoUrl} alt="" className="w-full h-full object-cover" />
@@ -611,11 +531,9 @@ const VotingPage = () => {
                                     )}
                                   </div>
 
-                                  {/* Info */}
                                   <h3 className="text-base font-extrabold text-[#1C2430] leading-tight truncate">{candidate.fullName}</h3>
                                   <p className="text-[#8A93A3] text-xs font-semibold uppercase tracking-wide mt-1">{candidate.level}</p>
 
-                                  {/* Manifesto */}
                                   {candidate.manifesto && (
                                     <div className="mt-3">
                                       {expandedManifesto === candidate.id ? (
@@ -644,7 +562,6 @@ const VotingPage = () => {
                           </div>
                         </div>
 
-                        {/* Pagination dots */}
                         {positionCandidates.length > 1 && (
                           <div className="flex justify-center gap-1.5 mt-1">
                             {positionCandidates.map((_, i) => (
@@ -660,7 +577,6 @@ const VotingPage = () => {
               );
             })()}
 
-            {/* Position navigation arrows */}
             {positions.length > 1 && (
               <div className="flex items-center justify-between gap-3">
                 <button
@@ -683,7 +599,6 @@ const VotingPage = () => {
               </div>
             )}
 
-            {/* Finish button */}
             {allVoted && (
               <div className="text-center pt-3">
                 <button

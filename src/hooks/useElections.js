@@ -1,8 +1,5 @@
-import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { electionService } from '../services/electionService';
+import * as api from '../lib/api';
 import { auditService } from '../services/auditService';
 import swal from '../utils/swal';
 
@@ -11,25 +8,17 @@ export const useElections = () => {
 
   const { data: elections = [], isLoading, error } = useQuery({
     queryKey: ['elections'],
-    queryFn: electionService.getAllElections,
-    staleTime: Infinity,
+    queryFn: api.fetchElections,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchInterval: false,
   });
 
-  useEffect(() => {
-    const q = query(collection(db, 'elections'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      queryClient.setQueryData(['elections'], data);
-    });
-    return () => unsubscribe();
-  }, [queryClient]);
-
   const createMutation = useMutation({
-    mutationFn: electionService.createElection,
+    mutationFn: api.createElection,
     onSuccess: (newElection) => {
       queryClient.setQueryData(['elections'], (old) => [newElection, ...(old || [])]);
       queryClient.invalidateQueries({ queryKey: ['election', newElection.id] });
@@ -40,20 +29,20 @@ export const useElections = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => electionService.updateElection(id, data),
+    mutationFn: ({ id, data }) => api.updateElection(id, data),
     onSuccess: (updated) => {
       queryClient.setQueryData(['elections'], (old) =>
         (old || []).map(e => e.id === updated.id ? { ...e, ...updated } : e)
       );
       queryClient.invalidateQueries({ queryKey: ['election', updated.id] });
       auditService.logAction({ action: 'ELECTION_UPDATED', details: `Updated election: ${updated.title || updated.id}` });
-      swal.success('Election Updated', `Election has been updated.`);
+      swal.success('Election Updated', 'Election has been updated.');
     },
     onError: () => swal.error('Error', 'Failed to update election'),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: electionService.deleteElection,
+    mutationFn: api.deleteElection,
     onSuccess: (_, id) => {
       queryClient.setQueryData(['elections'], (old) => (old || []).filter(e => e.id !== id));
       auditService.logAction({ action: 'ELECTION_DELETED', details: `Deleted election ID: ${id}` });
@@ -63,7 +52,7 @@ export const useElections = () => {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => electionService.updateStatus(id, status),
+    mutationFn: ({ id, status }) => api.updateElectionStatus(id, status),
     onSuccess: (result) => {
       queryClient.setQueryData(['elections'], (old) =>
         (old || []).map(e => e.id === result.id ? { ...e, status: result.status } : e)
@@ -83,7 +72,7 @@ export const useElections = () => {
     updateElection: (id, data) => updateMutation.mutateAsync({ id, data }),
     deleteElection: deleteMutation.mutateAsync,
     updateStatus: (id, status) => statusMutation.mutateAsync({ id, status }),
-    getElectionById: electionService.getElectionById,
+    getElectionById: api.fetchElection,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,

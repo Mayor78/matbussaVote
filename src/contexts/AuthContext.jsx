@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { auth, db } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, where, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
 import swal from '../utils/swal';
 import { rateLimitService } from '../services/rateLimitService';
 import { getUserFriendlyError } from '../utils/errors';
 import { generateDeviceSignature } from '../utils/deviceFingerprint';
-import { deviceBindingService } from '../services/deviceBindingService';
+import * as api from '../lib/api';
 
 const AuthContext = createContext({});
 
@@ -82,31 +83,15 @@ export const AuthProvider = ({ children }) => {
 
         let foundAdmin = null;
         try {
-          const adminQuery = query(
-            collection(db, 'admin_users'),
-            where('email', '==', userEmail)
-          );
-          const adminSnap = await getDocs(adminQuery);
-          if (!adminSnap.empty) {
-            const d = adminSnap.docs[0];
-            foundAdmin = { id: d.id, ...d.data() };
-          }
+          foundAdmin = await api.lookupAdminByEmail(userEmail);
         } catch (e) {
-          if (import.meta.env.DEV) console.error('[Auth] Failed to read admin_users:', e);
+          if (import.meta.env.DEV) console.error('[Auth] Failed to check admin:', e);
         }
 
         if (foundAdmin) {
           setIsAdminUser(true);
           setAdminRole(foundAdmin.role);
           setStudentData(null);
-
-          setDoc(doc(db, 'adminAccess', firebaseUser.uid), {
-            email: userEmail,
-            role: foundAdmin.role,
-            updatedAt: new Date().toISOString(),
-          }, { merge: true }).catch(e => {
-            if (import.meta.env.DEV) console.error('[Auth] Failed to sync admin access marker:', e);
-          });
           setLoading(false);
 
           if (freshLogin.current) {
@@ -121,17 +106,7 @@ export const AuthProvider = ({ children }) => {
         setAdminRole(null);
 
         try {
-          const studentQuery = query(
-            collection(db, 'students'),
-            where('email', '==', userEmail)
-          );
-          const studentSnap = await getDocs(studentQuery);
-          let foundStudent = null;
-
-          if (!studentSnap.empty) {
-            const data = studentSnap.docs[0];
-            foundStudent = { id: data.id, ...data.data() };
-          }
+          const foundStudent = await api.lookupStudentByEmail(userEmail);
 
           if (foundStudent) {
             setStudentData({
@@ -184,18 +159,7 @@ export const AuthProvider = ({ children }) => {
       let email = identifier;
 
       if (!isAdminLogin && !identifier.includes('@')) {
-        const allStudents = await getDocs(collection(db, 'students'));
-        let foundStudent = null;
-        allStudents.forEach(doc => {
-          const data = doc.data();
-          const matric = data.matricNumber || data.matric_number || '';
-          if (matric.toLowerCase() === identifier.toLowerCase()) foundStudent = data;
-        });
-
-        if (!foundStudent && import.meta.env.DEV) {
-          console.log('[Login] Matric lookup failed. Input:', identifier.toLowerCase());
-          console.log('[Login] Available matrics:', allStudents.docs.map(d => (d.data().matricNumber || d.data().matric_number || '').toLowerCase()));
-        }
+        const foundStudent = await api.lookupStudentByMatric(identifier);
 
         if (!foundStudent) {
           swal.error('Student Not Found', 'No student record matches this matric number. Please check and try again.');
@@ -215,7 +179,7 @@ export const AuthProvider = ({ children }) => {
       if (!isAdminLogin) {
         try {
           const deviceSig = await generateDeviceSignature();
-          const check = await deviceBindingService.checkBinding(deviceSig, email);
+          const check = await api.checkDevice(deviceSig, email);
 
           if (!check.allowed) {
             await auth.signOut();
@@ -223,7 +187,7 @@ export const AuthProvider = ({ children }) => {
             throw new Error('Device already bound');
           }
 
-          await deviceBindingService.bindDevice(deviceSig, '', email);
+          await api.bindDevice(deviceSig, '', email);
         } catch (e) {
           if (e.message === 'Device already bound') throw e;
         }
@@ -275,16 +239,10 @@ export const AuthProvider = ({ children }) => {
       freshLogin.current = true;
       await createUserWithEmailAndPassword(auth, email, password);
 
-      const allStudents = await getDocs(collection(db, 'students'));
-      let studentDocId = null;
-      allStudents.forEach(doc => {
-        const data = doc.data();
-        const matric = data.matricNumber || data.matric_number || '';
-        if (matric.toLowerCase() === studentInfo.matricNumber.toLowerCase()) studentDocId = doc.id;
-      });
+      const foundStudent = await api.lookupStudentByMatric(studentInfo.matricNumber);
 
-      if (studentDocId) {
-        await updateDoc(doc(db, 'students', studentDocId), {
+      if (foundStudent) {
+        await updateDoc(doc(db, 'students', foundStudent.id), {
           email: email.toLowerCase(),
           registeredStatus: true,
           updatedAt: new Date().toISOString(),

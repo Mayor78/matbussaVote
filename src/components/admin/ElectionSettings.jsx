@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { electionService } from '../../services/electionService';
 import { validateElectionReady } from '../../utils/electionValidation';
-import { AlertCircle, CheckCircle, Play, Square, Eye } from 'lucide-react';
+import { AlertCircle, CheckCircle, Play, Square, Eye, RotateCcw, Undo2 } from 'lucide-react';
 import AuthCodeModal from '../AuthCodeModal';
 import swal from '../../utils/swal';
 
@@ -61,6 +61,32 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
     });
   };
 
+  const handleReopenElection = () => {
+    requireCode('REOPEN_ELECTION', async () => {
+      if (!window.confirm('Reopen this election for voting? The duration timer will restart from now.')) return;
+      setLoading(true);
+      try {
+        await electionService.openElection(election.id);
+        swal.success('Success', 'Election reopened for voting!');
+        onUpdate();
+      } catch (error) {
+        swal.error('Error', error.message);
+      } finally { setLoading(false); }
+    });
+  };
+
+  const handleRollbackToDraft = async () => {
+    if (!window.confirm('Return this election to draft? This will allow you to edit positions and candidates.')) return;
+    setLoading(true);
+    try {
+      await electionService.updateStatus(election.id, 'draft');
+      swal.success('Success', 'Election returned to draft');
+      onUpdate();
+    } catch (error) {
+      swal.error('Error', error.message);
+    } finally { setLoading(false); }
+  };
+
   const status = election?.status || 'draft';
 
   return (
@@ -93,6 +119,7 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
           {status === 'draft' && <p className="text-xs text-gray-500 mt-1">Add positions and candidates before publishing.</p>}
           {status === 'published' && <p className="text-xs text-gray-500 mt-1">Election is ready. Open voting to start.</p>}
           {status === 'open' && <p className="text-xs text-gray-500 mt-1">Voting is active. Close when period ends.</p>}
+          {status === 'closed' && <p className="text-xs text-gray-500 mt-1">Voting has ended. You can reopen if needed.</p>}
         </div>
 
         {status === 'draft' && (
@@ -102,14 +129,25 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
         )}
 
         {status === 'published' && (
-          <button onClick={handleOpenElection} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50">
-            <Play className="w-4 h-4" /> {loading ? 'Processing...' : 'Open Voting'}
-          </button>
+          <>
+            <button onClick={handleOpenElection} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50">
+              <Play className="w-4 h-4" /> {loading ? 'Processing...' : 'Open Voting'}
+            </button>
+            <button onClick={handleRollbackToDraft} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm disabled:opacity-50 mt-2">
+              <Undo2 className="w-4 h-4" /> Return to Draft
+            </button>
+          </>
         )}
 
         {status === 'open' && (
           <button onClick={handleCloseElection} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm disabled:opacity-50">
             <Square className="w-4 h-4" /> {loading ? 'Processing...' : 'Close Election (Code Required)'}
+          </button>
+        )}
+
+        {status === 'closed' && (
+          <button onClick={handleReopenElection} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50">
+            <RotateCcw className="w-4 h-4" /> {loading ? 'Processing...' : 'Reopen for Voting (Code Required)'}
           </button>
         )}
 

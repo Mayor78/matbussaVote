@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 import {
   Vote, Clock, AlertCircle, LogOut, CheckCircle, Trophy, User, Medal,
   Lock, ChevronDown, ChevronUp, Share2,
 } from 'lucide-react';
+import * as api from '../lib/api';
 
 // Counts up from 0 to `value` once on mount/whenever value changes.
 // Used for vote counts and summary stats so the results reveal feels alive
@@ -42,56 +41,44 @@ const StudentDashboard = () => {
 
   const fetchData = useCallback(async (studentId) => {
     try {
-      const openSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'open')));
-      if (!openSnap.empty) {
-        const el = { id: openSnap.docs[0].id, ...openSnap.docs[0].data() };
+      const openElections = await api.fetchElections('open');
+      if (openElections.length > 0) {
+        const el = openElections[0];
         setElection(el);
         setResults(null);
         setSummary(null);
 
-        const pSnap = await getDocs(query(collection(db, 'positions'), where('electionId', '==', el.id)));
-        const total = pSnap.size;
+        const posData = await api.fetchPositions(el.id);
+        const total = posData.length;
 
-        const vSnap = await getDocs(query(
-          collection(db, 'votes'),
-          where('electionId', '==', el.id),
-          where('studentId', '==', studentId)
-        ));
-        setProgress({ voted: vSnap.size, total });
+        const { votes } = await api.checkVoteStatus(studentId, el.id);
+        setProgress({ voted: votes.length, total });
         return;
       }
 
-      const closedSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'closed')));
-      if (closedSnap.empty) { setElection(null); setResults(null); setSummary(null); return; }
+      const closedElections = await api.fetchElections('closed');
+      if (closedElections.length === 0) { setElection(null); setResults(null); setSummary(null); return; }
 
-      const closed = closedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      closed.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-      const el = closed[0];
+      closedElections.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+      const el = closedElections[0];
       setElection(el);
 
-      // pSnap/cSnap/vSnap = this election's positions, candidates, and this
-      // student's own votes (unchanged from before). allVotesSnap/studentsSnap
-      // are new — needed for the election-wide summary (turnout, votes cast).
-      const [pSnap, cSnap, vSnap, allVotesSnap, studentsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'positions'), where('electionId', '==', el.id))),
-        getDocs(query(collection(db, 'candidates'), where('electionId', '==', el.id))),
-        getDocs(query(collection(db, 'votes'), where('electionId', '==', el.id), where('studentId', '==', studentId))),
-        getDocs(query(collection(db, 'votes'), where('electionId', '==', el.id))),
-        getDocs(collection(db, 'students')),
+      const [posData, candData, voteRes, stats] = await Promise.all([
+        api.fetchPositions(el.id),
+        api.fetchCandidates({ electionId: el.id }),
+        api.checkVoteStatus(studentId, el.id),
+        api.fetchStats(el.id),
       ]);
 
-      const positions = pSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      positions.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
-
-      const candidates = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const positions = [...posData].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 
       const myVotes = {};
-      vSnap.docs.forEach(d => { const v = d.data(); myVotes[v.positionId] = v.candidateId; });
+      (voteRes.votes || []).forEach(v => { myVotes[v.positionId] = v.candidateId; });
 
       const resultsData = positions.map(pos => ({
         ...pos,
         myVote: myVotes[pos.id] || null,
-        candidates: candidates
+        candidates: candData
           .filter(c => c.positionId === pos.id)
           .map(c => ({ id: c.id, fullName: c.fullName, level: c.level, photoUrl: c.photoUrl || null, voteCount: c.voteCount || 0 }))
           .sort((a, b) => b.voteCount - a.voteCount),
@@ -101,14 +88,12 @@ const StudentDashboard = () => {
       setExpanded(Object.fromEntries(resultsData.map(p => [p.id, true])));
       setProgress({ voted: 0, total: 0 });
 
-      // Election-wide summary: registered voters, unique voters, turnout, ballots.
-      const allVotes = allVotesSnap.docs.map(d => d.data());
-      const uniqueVoters = new Set(allVotes.map(v => v.studentId)).size;
-      const totalBallots = allVotes.length;
-      const allStudents = studentsSnap.docs.map(d => d.data());
-      const registeredCount = allStudents.filter(s => s.registeredStatus || s.registered_status).length;
-      const turnoutPct = registeredCount > 0 ? Math.round((uniqueVoters / registeredCount) * 100) : 0;
-      setSummary({ registeredCount, uniqueVoters, totalBallots, turnoutPct });
+      setSummary({
+        registeredCount: stats.registeredVoters || 0,
+        uniqueVoters: stats.votedStudents || 0,
+        totalBallots: stats.totalVotes || 0,
+        turnoutPct: stats.turnout || 0,
+      });
     } catch (err) {
       console.error('Error fetching election:', err);
     }
@@ -122,18 +107,6 @@ const StudentDashboard = () => {
       setStudent(ctxStudent);
       fetchData(ctxStudent.id);
       setLoading(false);
-    } else if (user?.email) {
-      getDocs(collection(db, 'students')).then(snap => {
-        snap.forEach(d => {
-          const data = d.data();
-          if (data.email?.toLowerCase() === user.email?.toLowerCase()) {
-            const s = { id: d.id, ...data, fullName: data.fullName || data.full_name || '', matricNumber: data.matricNumber || data.matric_number || '' };
-            setStudent(s);
-            fetchData(s.id);
-          }
-        });
-        setLoading(false);
-      });
     } else {
       setLoading(false);
     }

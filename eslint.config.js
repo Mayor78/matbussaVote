@@ -5,9 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'backend/node_modules']),
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['src/**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -21,6 +21,15 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^React$', argsIgnorePattern: '^_' }],
       'react-refresh/only-export-components': ['warn', { allowExportNames: ['useAuth', 'AuthContext'] }],
       'react-hooks/set-state-in-effect': 'warn',
+    },
+  },
+  {
+    files: ['backend/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 ])

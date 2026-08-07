@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Edit2, Trash2, Eye } from 'lucide-react';
+import { Calendar, Edit2, Trash2, Eye, RotateCcw, Play } from 'lucide-react';
 import AuthCodeModal from '../AuthCodeModal';
 import Card from '../Card';
+import { useElections } from '../../hooks/useElections';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -11,14 +12,33 @@ const statusColors = {
   closed: 'bg-red-100 text-red-800',
 };
 
-export const ElectionCard = ({ election, onDelete }) => {
+export const ElectionCard = ({ election, onDelete, onEdit, onReopen }) => {
   const navigate = useNavigate();
   const [showAuthCode, setShowAuthCode] = useState(false);
+  const [authAction, setAuthAction] = useState(null);
 
   const handleDeleteClick = () => {
     if (window.confirm(`Delete "${election.title}"?`)) {
+      setAuthAction('DELETE_ELECTION');
       setShowAuthCode(true);
     }
+  };
+
+  const handleReopenClick = () => {
+    if (window.confirm(`Reopen "${election.title}" for voting? The duration timer will restart.`)) {
+      setAuthAction('REOPEN_ELECTION');
+      setShowAuthCode(true);
+    }
+  };
+
+  const onAuthorizedAuth = () => {
+    if (authAction === 'DELETE_ELECTION') {
+      onDelete(election.id);
+    } else if (authAction === 'REOPEN_ELECTION') {
+      onReopen(election.id);
+    }
+    setShowAuthCode(false);
+    setAuthAction(null);
   };
 
   return (
@@ -45,9 +65,16 @@ export const ElectionCard = ({ election, onDelete }) => {
             <button onClick={() => navigate(`/admin/elections/${election.id}`)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="View">
               <Eye className="w-4 h-4" />
             </button>
-            <button onClick={() => navigate(`/admin/elections/${election.id}`)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition" title="Edit">
-              <Edit2 className="w-4 h-4" />
-            </button>
+            {(election.status === 'draft' || election.status === 'published') && (
+              <button onClick={() => onEdit(election)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition" title="Edit">
+                <Edit2 className="w-4 h-4" />
+              </button>
+            )}
+            {election.status === 'closed' && (
+              <button onClick={handleReopenClick} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition" title="Reopen for voting">
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            )}
             <button onClick={handleDeleteClick} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition" title="Delete">
               <Trash2 className="w-4 h-4" />
             </button>
@@ -57,12 +84,9 @@ export const ElectionCard = ({ election, onDelete }) => {
 
       <AuthCodeModal
         isOpen={showAuthCode}
-        onClose={() => setShowAuthCode(false)}
-        action="DELETE_ELECTION"
-        onAuthorized={() => {
-          onDelete(election.id);
-          setShowAuthCode(false);
-        }}
+        onClose={() => { setShowAuthCode(false); setAuthAction(null); }}
+        action={authAction}
+        onAuthorized={onAuthorizedAuth}
       />
     </>
   );

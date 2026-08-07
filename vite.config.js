@@ -9,7 +9,7 @@ const CSP_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https: blob:",
   "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://*.firebaseio.com https://*.firebase.com https://*.googleapis.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://api.cloudinary.com https://securetoken.googleapis.com",
+  "connect-src 'self' https://*.firebaseio.com https://*.firebase.com https://*.googleapis.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://api.cloudinary.com https://securetoken.googleapis.com http://localhost:3001",
   "frame-src 'self' https://*.firebaseapp.com",
   "object-src 'none'",
   "base-uri 'self'",
