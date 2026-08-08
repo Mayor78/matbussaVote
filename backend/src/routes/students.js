@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getFirestore } from '../config/firebase.js';
+import { getFirestore, getAuth } from '../config/firebase.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { invalidate } from '../config/cache.js';
 
@@ -103,7 +103,22 @@ router.put('/:id', requireAdmin, async (req, res) => {
 
 router.patch('/:id/ban', requireAdmin, async (req, res) => {
   try {
-    await db().collection('students').doc(req.params.id).update({
+    const ref = db().collection('students').doc(req.params.id);
+    const snap = await ref.get();
+    const studentEmail = snap.data()?.email;
+
+    if (studentEmail) {
+      try {
+        const userRecord = await getAuth().getUserByEmail(studentEmail);
+        await getAuth().updateUser(userRecord.uid, { disabled: true });
+      } catch (e) {
+        if (e.code !== 'auth/user-not-found') {
+          console.error('Failed to disable Firebase Auth user:', e.message);
+        }
+      }
+    }
+
+    await ref.update({
       banned: true,
       bannedAt: new Date().toISOString(),
       bannedBy: req.user?.email || 'admin',
@@ -118,7 +133,22 @@ router.patch('/:id/ban', requireAdmin, async (req, res) => {
 
 router.patch('/:id/unban', requireAdmin, async (req, res) => {
   try {
-    await db().collection('students').doc(req.params.id).update({
+    const ref = db().collection('students').doc(req.params.id);
+    const snap = await ref.get();
+    const studentEmail = snap.data()?.email;
+
+    if (studentEmail) {
+      try {
+        const userRecord = await getAuth().getUserByEmail(studentEmail);
+        await getAuth().updateUser(userRecord.uid, { disabled: false });
+      } catch (e) {
+        if (e.code !== 'auth/user-not-found') {
+          console.error('Failed to re-enable Firebase Auth user:', e.message);
+        }
+      }
+    }
+
+    await ref.update({
       banned: false,
       bannedAt: null,
       bannedBy: '',
