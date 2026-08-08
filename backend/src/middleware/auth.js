@@ -1,4 +1,4 @@
-import { getAuth } from '../config/firebase.js';
+import { getAuth, getFirestore } from '../config/firebase.js';
 
 export async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
@@ -34,10 +34,32 @@ export async function optionalAuth(req, res, next) {
 }
 
 export async function requireAdmin(req, res, next) {
-  await requireAuth(req, res, () => {
+  await requireAuth(req, res, async () => {
     if (req.user?.admin === true) {
       return next();
     }
+
+    const email = req.user?.email?.toLowerCase();
+    if (!email) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    try {
+      const snap = await getFirestore()
+        .collection('admin_users')
+        .where('email', '==', email)
+        .limit(1)
+        .get();
+
+      if (!snap.empty) {
+        req.user.admin = true;
+        req.user.adminRole = snap.docs[0].data().role;
+        return next();
+      }
+    } catch (err) {
+      console.error('Admin lookup failed:', err.message);
+    }
+
     return res.status(403).json({ error: 'Admin access required' });
   });
 }

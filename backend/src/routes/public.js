@@ -35,17 +35,17 @@ router.get('/students/lookup', async (req, res) => {
 
     const searchEmail = email.toLowerCase().trim();
 
-    const snap = await getCachedOrSet(`public:student:email:${searchEmail}`, 300, async () => {
-      const result = await db()
-        .collection('students')
-        .where('email', '==', searchEmail)
-        .get();
-      if (result.empty) return null;
-      const d = result.docs[0];
-      return { id: d.id, ...d.data() };
+    const students = await getCachedOrSet('public:students:list', 300, async () => {
+      const snap = await db().collection('students').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     });
 
-    res.json(snap || null);
+    const student = students.find(s => {
+      const e = (s.email || '').toLowerCase().trim();
+      return e === searchEmail;
+    });
+
+    res.json(student || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -58,14 +58,14 @@ router.get('/admin/lookup', async (req, res) => {
 
     const searchEmail = email.toLowerCase().trim();
 
-    const admin = await getCachedOrSet(`public:admin:email:${searchEmail}`, 300, async () => {
-      const result = await db()
-        .collection('admin_users')
-        .where('email', '==', searchEmail)
-        .get();
-      if (result.empty) return null;
-      const d = result.docs[0];
-      return { id: d.id, ...d.data() };
+    const admins = await getCachedOrSet('public:admins:list', 300, async () => {
+      const snap = await db().collection('admin_users').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    });
+
+    const admin = admins.find(a => {
+      const e = (a.email || '').toLowerCase().trim();
+      return e === searchEmail;
     });
 
     res.json(admin || null);

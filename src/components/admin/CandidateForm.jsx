@@ -21,6 +21,7 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
   const [loading, setLoading] = useState(false);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [importedPhotoUrl, setImportedPhotoUrl] = useState(null);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importPool, setImportPool] = useState([]);
@@ -62,6 +63,7 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
     } else {
       reset({ fullName: '', level: 'ND1', manifesto: '', positionId: positionId || '' });
       setPhotoPreview(null);
+      setImportedPhotoUrl(null);
     }
   }, [candidate, positionId, reset]);
 
@@ -72,9 +74,10 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
     if (!isValidFileSize(file, 2)) { swal.error('Error', 'Image must be under 2MB'); return; }
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
+    setImportedPhotoUrl(null);
   };
 
-  const handleRemovePhoto = () => { setPhotoFile(null); setPhotoPreview(null); };
+  const handleRemovePhoto = () => { setPhotoFile(null); setPhotoPreview(null); setImportedPhotoUrl(null); };
 
   const openImport = async () => {
     setImportOpen(true);
@@ -92,7 +95,11 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
     setValue('fullName', c.fullName || '');
     setValue('level', c.level || 'ND1');
     setValue('manifesto', c.manifesto || '');
-    if (c.photoUrl) setPhotoPreview(c.photoUrl);
+    if (c.photoUrl) {
+      setPhotoPreview(c.photoUrl);
+      setPhotoFile(null);
+      setImportedPhotoUrl(c.photoUrl);
+    }
     setImportOpen(false);
   };
 
@@ -113,9 +120,9 @@ export const CandidateForm = ({ electionId: propElectionId = '', positionId = ''
     setLoading(true);
     try {
       if (candidate) {
-        await updateCandidate(candidate.id, result.data, photoFile);
+        await updateCandidate(candidate.id, { ...result.data, photoUrl: result.data.photoUrl || importedPhotoUrl || null }, photoFile);
       } else {
-        await createCandidate(result.data, photoFile);
+        await createCandidate({ ...result.data, photoUrl: result.data.photoUrl || importedPhotoUrl || null }, photoFile);
       }
       onSuccess();
     } catch (error) { swal.error('Error', getUserFriendlyError(error)); } finally { setLoading(false); }

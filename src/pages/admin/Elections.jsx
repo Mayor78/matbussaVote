@@ -12,7 +12,7 @@ const TABS = [
 ];
 
 export const Elections = () => {
-  const { elections, loading, deleteElection, updateStatus, updateElection } = useElections();
+  const { elections, loading, error, deleteElection, updateStatus, updateElection } = useElections();
   const [activeTab, setActiveTab] = useState('active');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editElection, setEditElection] = useState(null);
@@ -30,6 +30,15 @@ export const Elections = () => {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+        <p className="text-red-700 font-semibold mb-2">Failed to load elections</p>
+        <p className="text-red-500 text-sm">{error.message || 'Check that the API server is running and your session is active.'}</p>
       </div>
     );
   }

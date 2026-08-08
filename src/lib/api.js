@@ -53,6 +53,7 @@ async function request(path, options = {}) {
 // ── Elections ──
 
 export async function fetchElections(status) {
+  if (typeof status !== 'string') status = undefined;
   const params = status ? `?status=${status}` : '';
   return request(`/elections${params}`);
 }
