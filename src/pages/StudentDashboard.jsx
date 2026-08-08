@@ -6,6 +6,7 @@ import {
   Lock, ChevronDown, ChevronUp, Share2,
 } from 'lucide-react';
 import * as api from '../lib/api';
+import VotingGuide from '../components/VotingGuide';
 
 // Counts up from 0 to `value` once on mount/whenever value changes.
 // Used for vote counts and summary stats so the results reveal feels alive
@@ -37,6 +38,7 @@ const StudentDashboard = () => {
   const [expanded, setExpanded] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showGuide, setShowGuide] = useState(false);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async (studentId) => {
@@ -107,6 +109,10 @@ const StudentDashboard = () => {
       setStudent(ctxStudent);
       fetchData(ctxStudent.id);
       setLoading(false);
+      if (!sessionStorage.getItem('votingGuideShown')) {
+        setTimeout(() => setShowGuide(true), 500);
+        sessionStorage.setItem('votingGuideShown', 'true');
+      }
     } else {
       setLoading(false);
     }
@@ -458,6 +464,7 @@ const StudentDashboard = () => {
           </div>
         )}
       </div>
+      <VotingGuide isOpen={showGuide} onClose={() => setShowGuide(false)} />
     </div>
   );
 };

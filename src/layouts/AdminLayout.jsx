@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import HelpButton from '../components/HelpButton';
 import {
   LayoutDashboard, Vote, Users, UserPlus, BarChart3,
   FileText, LogOut, Menu, X, Shield,
@@ -122,6 +123,7 @@ const AdminLayout = () => {
           <Outlet />
         </main>
       </div>
+      <HelpButton />
     </div>
   );
 };

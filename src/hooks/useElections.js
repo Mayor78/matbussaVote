@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../lib/api';
 import { auditService } from '../services/auditService';
 import swal from '../utils/swal';
+import { getFriendlyError } from '../utils/errors';
 
 export const useElections = () => {
   const queryClient = useQueryClient();
@@ -25,7 +26,7 @@ export const useElections = () => {
       auditService.logAction({ action: 'ELECTION_CREATED', details: `Created election: ${newElection.title}` });
       swal.success('Election Created', `Election "${newElection.title}" has been created.`);
     },
-    onError: () => swal.error('Error', 'Failed to create election'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const updateMutation = useMutation({
@@ -38,7 +39,7 @@ export const useElections = () => {
       auditService.logAction({ action: 'ELECTION_UPDATED', details: `Updated election: ${updated.title || updated.id}` });
       swal.success('Election Updated', 'Election has been updated.');
     },
-    onError: () => swal.error('Error', 'Failed to update election'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const deleteMutation = useMutation({
@@ -48,7 +49,7 @@ export const useElections = () => {
       auditService.logAction({ action: 'ELECTION_DELETED', details: `Deleted election ID: ${id}` });
       swal.success('Election Deleted', 'The election has been deleted.');
     },
-    onError: () => swal.error('Error', 'Failed to delete election'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const statusMutation = useMutation({
@@ -61,7 +62,7 @@ export const useElections = () => {
       auditService.logAction({ action: `ELECTION_${result.status.toUpperCase()}`, details: `Election ID: ${result.id}` });
       swal.success(`Election ${result.status}`, `Election is now ${result.status}.`);
     },
-    onError: (error) => swal.error('Error', error?.message || 'Failed to update status'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   return {

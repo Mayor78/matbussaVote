@@ -1,67 +1,24 @@
-const FIREBASE_AUTH_ERRORS = {
-  'auth/invalid-credential': 'Invalid email or password. Please try again.',
-  'auth/invalid-email': 'The email address is not valid.',
-  'auth/user-disabled': 'This account has been disabled. Contact an administrator.',
-  'auth/user-not-found': 'No account found with this email.',
-  'auth/wrong-password': 'Invalid email or password. Please try again.',
-  'auth/email-already-in-use': 'This email is already registered.',
-  'auth/weak-password': 'Password must be at least 6 characters.',
-  'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
-  'auth/network-request-failed': 'Network error. Please check your internet connection.',
-  'auth/operation-not-allowed': 'This login method is not enabled. Contact an administrator.',
-  'auth/requires-recent-login': 'Please log out and log in again before retrying.',
-  'auth/invalid-action-code': 'The authorization code has expired or is invalid.',
-  'auth/expired-action-code': 'The authorization code has expired.',
-  'auth/popup-closed-by-user': 'Login popup was closed. Please try again.',
-  'auth/cancelled-popup-request': 'Login cancelled. Please try again.',
-  'auth/popup-blocked': 'Login popup was blocked by your browser. Please allow popups.',
-  'auth/internal-error': 'An unexpected error occurred. Please try again.',
-};
+export function getFriendlyError(err) {
+  if (!err) return 'Something went wrong. Please try again or ask for help.';
 
-const FIRESTORE_ERRORS = {
-  'permission-denied': 'You do not have permission to perform this action.',
-  'unauthenticated': 'Please log in to continue.',
-  'not-found': 'The requested resource was not found.',
-  'already-exists': 'This resource already exists.',
-  'resource-exhausted': 'Too many requests. Please wait a moment.',
-  'failed-precondition': 'Operation cannot be completed at this time.',
-  'aborted': 'Operation was aborted. Please try again.',
-  'out-of-range': 'This operation is out of the allowed range.',
-  'unimplemented': 'This operation is not supported.',
-  'internal': 'An internal error occurred. Please try again.',
-  'unavailable': 'Service is temporarily unavailable. Please try again.',
-  'data-loss': 'A data loss occurred. Please contact support.',
-};
+  const msg = (err.message || String(err)).toLowerCase();
 
-const VOTE_ERRORS = {
-  ALREADY_VOTED: 'You have already voted for this position.',
-  VOTE_LOCK_FAILED: 'Vote processing failed. Please try again.',
-};
+  if (msg.includes('invalid') && msg.includes('token')) return 'Your session has expired. Please log in again.';
+  if (msg.includes('auth') && msg.includes('required')) return 'You need to log in first to do this.';
+  if (msg.includes('admin')) return 'Only an admin can do this. Ask your admin for help.';
+  if (msg.includes('already voted')) return 'You have already voted for this position. You cannot vote twice.';
+  if (msg.includes('already registered')) return 'This device or account is already registered to someone else. If you think this is a mistake, contact your admin.';
+  if (msg.includes('quota') || msg.includes('resource_exhausted')) return 'The system is very busy right now. Please wait a moment and try again.';
+  if (msg.includes('network') || msg.includes('fetch')) return 'No internet connection. Please check your network and try again.';
+  if (msg.includes('not found')) return 'The information you are looking for does not exist or has been removed.';
+  if (msg.includes('rate limit') || msg.includes('too many')) return 'You are trying too many times. Please wait a moment and try again.';
+  if (msg.includes('banned') || msg.includes('suspended')) return 'Your account has been suspended. Contact your department admin for help.';
+  if (msg.includes('expired')) return 'Your session has expired. Please log in again to continue.';
+  if (msg.includes('password') || msg.includes('wrong password')) return 'Wrong password. Check your password and try again. If you forgot your password, click "Forgot Password".';
+  if (msg.includes('user not found') || msg.includes('no account')) return 'No account found with these details. Check your matric number or email and try again.';
+  if (msg.includes('device')) return 'This device is already used by another voter. Please use your own device to vote.';
 
-export function getUserFriendlyError(error) {
-  if (!error) return 'An unexpected error occurred. Please try again.';
-
-  if (typeof error === 'string') return error;
-
-  if (error.message && VOTE_ERRORS[error.message]) {
-    return VOTE_ERRORS[error.message];
-  }
-
-  if (error.code && FIREBASE_AUTH_ERRORS[error.code]) {
-    return FIREBASE_AUTH_ERRORS[error.code];
-  }
-
-  if (error.code && FIRESTORE_ERRORS[error.code]) {
-    return FIRESTORE_ERRORS[error.code];
-  }
-
-  if (error.code && error.code.startsWith('auth/')) {
-    return 'Authentication failed. Please check your credentials and try again.';
-  }
-
-  if (import.meta.env.DEV) {
-    console.debug('[Error]', error.code, error.message);
-  }
-
-  return 'An unexpected error occurred. Please try again.';
+  return 'Something went wrong. Please try again or tap the Help button if the problem continues.';
 }
+
+export const getUserFriendlyError = getFriendlyError;

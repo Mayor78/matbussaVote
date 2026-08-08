@@ -3,7 +3,8 @@ import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { LogOut, User, Vote, Home, Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import logo from '../assets/IMG_5038.jpeg'; // Adjust the path to your logo image
+import HelpButton from '../components/HelpButton';
+import logo from '../assets/IMG_5038.jpeg';
 
 const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -85,6 +86,7 @@ const MainLayout = () => {
       <main className="mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <Outlet />
       </main>
+      <HelpButton />
     </div>
   );
 };

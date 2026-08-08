@@ -8,6 +8,7 @@ import { auditService } from '../services/auditService';
 import { CountdownBanner } from '../components/CountdownTimer';
 import * as api from '../lib/api';
 import swal from '../utils/swal';
+import { startVotingTour } from '../utils/votingTour';
 
 function hashCode(str) {
   let hash = 0;
@@ -320,11 +321,17 @@ const VotingPage = () => {
               <p className="text-[#8A93A3] text-xs font-semibold uppercase tracking-wide mt-1">
                 {selectedElection.academicSession || selectedElection.academic_session || ''}
               </p>
+              <button
+                onClick={startVotingTour}
+                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-xs font-bold hover:bg-amber-100 transition-colors"
+              >
+                Take a tour
+              </button>
             </div>
 
             {selectedElection.closesAt && <CountdownBanner closesAt={selectedElection.closesAt} />}
 
-            <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm px-4 py-4">
+            <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm px-4 py-4" id="voting-progress-section">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-bold text-[#1C2430]">Your progress</span>
                 <span className="text-sm font-bold text-[#1F3A5C]">{votedCount} of {positions.length} complete</span>

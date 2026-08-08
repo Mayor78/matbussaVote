@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../lib/api';
 import swal from '../utils/swal';
+import { getFriendlyError } from '../utils/errors';
 
 export const useCandidates = (electionId, positionId = null) => {
   const queryClient = useQueryClient();
@@ -28,7 +29,7 @@ export const useCandidates = (electionId, positionId = null) => {
       api.buildBundle(electionId).catch(() => {});
       swal.success('Candidate Added', 'Candidate has been added successfully.');
     },
-    onError: () => swal.error('Error', 'Failed to add candidate'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const updateMutation = useMutation({
@@ -38,7 +39,7 @@ export const useCandidates = (electionId, positionId = null) => {
       api.buildBundle(electionId).catch(() => {});
       swal.success('Candidate Updated', 'Candidate has been updated.');
     },
-    onError: () => swal.error('Error', 'Failed to update candidate'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const deleteMutation = useMutation({
@@ -48,7 +49,7 @@ export const useCandidates = (electionId, positionId = null) => {
       api.buildBundle(electionId).catch(() => {});
       swal.success('Candidate Deleted', 'Candidate has been removed.');
     },
-    onError: () => swal.error('Error', 'Failed to delete candidate'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   return {

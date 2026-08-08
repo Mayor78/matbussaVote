@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../lib/api';
 import swal from '../utils/swal';
+import { getFriendlyError } from '../utils/errors';
 
 export const usePositions = (electionId) => {
   const queryClient = useQueryClient();
@@ -26,7 +27,7 @@ export const usePositions = (electionId) => {
       api.buildBundle(electionId).catch(() => {});
       swal.success('Position Added', 'Position has been added.');
     },
-    onError: () => swal.error('Error', 'Failed to add position'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const updateMutation = useMutation({
@@ -36,7 +37,7 @@ export const usePositions = (electionId) => {
       api.buildBundle(electionId).catch(() => {});
       swal.success('Position Updated', 'Position has been updated.');
     },
-    onError: () => swal.error('Error', 'Failed to update position'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   const deleteMutation = useMutation({
@@ -46,7 +47,7 @@ export const usePositions = (electionId) => {
       api.buildBundle(electionId).catch(() => {});
       swal.success('Position Deleted', 'Position has been removed.');
     },
-    onError: () => swal.error('Error', 'Failed to delete position'),
+    onError: (error) => swal.error('Oops!', getFriendlyError(error)),
   });
 
   return {
