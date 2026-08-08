@@ -47,13 +47,16 @@ export async function requireAdmin(req, res, next) {
     try {
       const snap = await getFirestore()
         .collection('admin_users')
-        .where('email', '==', email)
-        .limit(1)
         .get();
 
-      if (!snap.empty) {
+      const found = snap.docs.find(d => {
+        const e = (d.data().email || '').toLowerCase().trim();
+        return e === email;
+      });
+
+      if (found) {
         req.user.admin = true;
-        req.user.adminRole = snap.docs[0].data().role;
+        req.user.adminRole = found.data().role;
         return next();
       }
     } catch (err) {

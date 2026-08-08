@@ -149,6 +149,14 @@ export async function deleteStudent(id) {
   return request(`/students/${id}`, { method: 'DELETE' });
 }
 
+export async function banStudent(id) {
+  return request(`/students/${id}/ban`, { method: 'PATCH' });
+}
+
+export async function unbanStudent(id) {
+  return request(`/students/${id}/unban`, { method: 'PATCH' });
+}
+
 // ── Device Binding ──
 
 export async function checkDevice(deviceSignature, studentEmail) {

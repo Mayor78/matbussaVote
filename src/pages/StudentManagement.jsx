@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import swal from '../utils/swal';
-import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight, Trash } from 'lucide-react';
+import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight, Trash, Ban, ShieldOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { auditService } from '../services/auditService';
+import * as api from '../lib/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
@@ -27,6 +28,7 @@ const fetchStudents = async () => {
       email: raw.email || '',
       registeredStatus: raw.registeredStatus ?? raw.registered_status ?? false,
       votingStatus: raw.votingStatus ?? raw.voting_status ?? false,
+      banned: raw.banned || false,
     };
   });
 };
@@ -128,6 +130,26 @@ export const StudentManagement = () => {
     onError: (error) => swal.error('Error', getUserFriendlyError(error)),
   });
 
+  const banMutation = useMutation({
+    mutationFn: (id) => api.banStudent(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      const student = students.find(s => s.id === id);
+      swal.success('Banned', `${student?.fullName || 'Student'} has been banned.`);
+    },
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
+  });
+
+  const unbanMutation = useMutation({
+    mutationFn: (id) => api.unbanStudent(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      const student = students.find(s => s.id === id);
+      swal.success('Unbanned', `${student?.fullName || 'Student'} has been unbanned.`);
+    },
+    onError: (error) => swal.error('Error', getUserFriendlyError(error)),
+  });
+
   const onAddEditSubmit = async (data) => {
     clearErrors();
     const result = studentSchema.safeParse(data);
@@ -220,6 +242,16 @@ export const StudentManagement = () => {
     });
   };
 
+  const handleBan = (id) => {
+    if (window.confirm('Ban this student? They will not be able to log in.')) {
+      banMutation.mutateAsync(id);
+    }
+  };
+
+  const handleUnban = (id) => {
+    requireCode('UNBAN_STUDENT', () => unbanMutation.mutateAsync(id));
+  };
+
   const openAddModal = () => {
     setEditingStudent(null);
     reset({ fullName: '', matricNumber: '', level: 'ND1' });
@@ -282,6 +314,7 @@ export const StudentManagement = () => {
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Level</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Voted</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Ban</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -293,7 +326,20 @@ export const StudentManagement = () => {
                       <td className="px-4 py-3 text-xs text-gray-600">{s.level}</td>
                       <td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${s.registeredStatus ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{s.registeredStatus ? 'REGISTERED' : 'PRELOADED'}</span></td>
                       <td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${s.votingStatus ? 'bg-blue-100 text-blue-800' : 'bg-yellow-50 text-yellow-800'}`}>{s.votingStatus ? 'YES' : 'NO'}</span></td>
-                      <td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => handleEditRequest(s)} className="p-1.5 text-gray-600 hover:text-primary-600"><Edit2 className="w-3.5 h-3.5" /></button><button onClick={() => handleDeleteRequest(s.id, s.fullName)} className="p-1.5 text-red-600 hover:text-red-800"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${s.banned ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-500'}`}>
+                          {s.banned ? 'BANNED' : 'OK'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3"><div className="flex gap-1">
+                        <button onClick={() => handleEditRequest(s)} className="p-1.5 text-gray-600 hover:text-primary-600"><Edit2 className="w-3.5 h-3.5" /></button>
+                        {s.banned ? (
+                          <button onClick={() => handleUnban(s.id)} className="p-1.5 text-green-600 hover:text-green-800" title="Unban (requires code)"><ShieldOff className="w-3.5 h-3.5" /></button>
+                        ) : (
+                          <button onClick={() => handleBan(s.id)} className="p-1.5 text-orange-600 hover:text-orange-800" title="Ban student"><Ban className="w-3.5 h-3.5" /></button>
+                        )}
+                        <button onClick={() => handleDeleteRequest(s.id, s.fullName)} className="p-1.5 text-red-600 hover:text-red-800"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div></td>
                     </tr>
                   ))}
                 </tbody>

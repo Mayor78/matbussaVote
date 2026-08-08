@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getFirestore } from '../config/firebase.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { invalidate } from '../config/cache.js';
 
 const router = Router();
 const db = () => getFirestore();
@@ -95,6 +96,36 @@ router.put('/:id', requireAdmin, async (req, res) => {
     delete update.id;
     await db().collection('students').doc(req.params.id).update(update);
     res.json({ id: req.params.id, ...update });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/ban', requireAdmin, async (req, res) => {
+  try {
+    await db().collection('students').doc(req.params.id).update({
+      banned: true,
+      bannedAt: new Date().toISOString(),
+      bannedBy: req.user?.email || 'admin',
+      updatedAt: new Date().toISOString(),
+    });
+    invalidate('public:students:list');
+    res.json({ success: true, banned: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/unban', requireAdmin, async (req, res) => {
+  try {
+    await db().collection('students').doc(req.params.id).update({
+      banned: false,
+      bannedAt: null,
+      bannedBy: '',
+      updatedAt: new Date().toISOString(),
+    });
+    invalidate('public:students:list');
+    res.json({ success: true, banned: false });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

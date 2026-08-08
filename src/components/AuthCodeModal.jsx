@@ -16,6 +16,8 @@ const AuthCodeModal = ({ isOpen, onClose, action, target = '', onAuthorized }) =
     DELETE_CANDIDATE: 'Delete Candidate',
     CLOSE_ELECTION: 'Close Election',
     DELETE_ELECTION: 'Delete Election',
+    REOPEN_ELECTION: 'Reopen Election',
+    UNBAN_STUDENT: 'Unban Student',
   };
 
   const handleSubmit = async (e) => {

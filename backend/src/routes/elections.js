@@ -100,7 +100,7 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
 
     if (status === 'open') {
       const snap = await ref.get();
-      if (snap.exists()) {
+      if (snap.exists) {
         const hours = snap.data().durationHours || 24;
         update.closesAt = new Date(Date.now() + hours * 3600000).toISOString();
       }

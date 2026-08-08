@@ -109,6 +109,18 @@ export const AuthProvider = ({ children }) => {
           const foundStudent = await api.lookupStudentByEmail(userEmail);
 
           if (foundStudent) {
+            if (foundStudent.banned) {
+              swal.error('Account Banned', 'Your account has been suspended. Contact your Electoral Committee.');
+              try { await auth.signOut(); } catch {}
+              setUser(null);
+              setIsAdminUser(false);
+              setAdminRole(null);
+              setStudentData(null);
+              navigate('/login');
+              setLoading(false);
+              return;
+            }
+
             setStudentData({
               id: foundStudent.id,
               ...foundStudent,
@@ -116,6 +128,7 @@ export const AuthProvider = ({ children }) => {
               matricNumber: foundStudent.matricNumber || foundStudent.matric_number || '',
               registeredStatus: foundStudent.registeredStatus ?? foundStudent.registered_status ?? false,
               votingStatus: foundStudent.votingStatus ?? foundStudent.voting_status ?? false,
+              banned: foundStudent.banned || false,
             });
           } else {
             setStudentData(null);
@@ -194,7 +207,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       try { await rateLimitService.resetRateLimit(identifier); } catch { /* best-effort */ }
-      swal.success('Login Successful', 'Welcome back!');
+      
 
       if (loginFallbackRef.current) { clearTimeout(loginFallbackRef.current); loginFallbackRef.current = null; }
       loginFallbackRef.current = setTimeout(() => {

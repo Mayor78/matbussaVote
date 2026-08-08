@@ -61,7 +61,7 @@ export const useElections = () => {
       auditService.logAction({ action: `ELECTION_${result.status.toUpperCase()}`, details: `Election ID: ${result.id}` });
       swal.success(`Election ${result.status}`, `Election is now ${result.status}.`);
     },
-    onError: () => swal.error('Error', 'Failed to update status'),
+    onError: (error) => swal.error('Error', error?.message || 'Failed to update status'),
   });
 
   return {

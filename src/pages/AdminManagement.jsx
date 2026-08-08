@@ -24,7 +24,9 @@ const CODE_ACTIONS = [
   { value: 'DELETE_STUDENT', label: 'Delete Student Record' },
   { value: 'DELETE_CANDIDATE', label: 'Delete Candidate' },
   { value: 'CLOSE_ELECTION', label: 'Close Election' },
+  { value: 'REOPEN_ELECTION', label: 'Reopen Election' },
   { value: 'DELETE_ELECTION', label: 'Delete Election' },
+  { value: 'UNBAN_STUDENT', label: 'Unban Student' },
 ];
 
 const AdminManagement = () => {
