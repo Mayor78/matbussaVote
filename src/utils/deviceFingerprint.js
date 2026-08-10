@@ -1,11 +1,10 @@
 export async function generateDeviceSignature() {
   const components = [
-    navigator.userAgent || '',
     `${window.screen.width}x${window.screen.height}`,
     `${window.screen.colorDepth}`,
     Intl.DateTimeFormat().resolvedOptions().timeZone || '',
     navigator.language || '',
-    navigator.hardwareConcurrency || '',
+    `${navigator.hardwareConcurrency || 0}`,
     navigator.platform || '',
   ];
 

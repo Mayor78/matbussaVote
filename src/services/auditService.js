@@ -15,8 +15,8 @@ export const auditService = {
         details: details || '',
         timestamp: new Date().toISOString(),
       });
-    } catch (error) {
-      console.error('Error logging audit action:', error);
+    } catch {
+      // Silently skip — only admins can write audit logs
     }
   },
 
@@ -40,8 +40,7 @@ export const auditService = {
       const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
 
       return { logs, lastVisible: lastDoc, hasMore: snapshot.docs.length === pageSize };
-    } catch (error) {
-      console.error('Error fetching audit logs:', error);
+    } catch {
       return { logs: [], lastVisible: null, hasMore: false };
     }
   },
@@ -55,8 +54,7 @@ export const auditService = {
         counts[action] = (counts[action] || 0) + 1;
       });
       return counts;
-    } catch (error) {
-      console.error('Error fetching action counts:', error);
+    } catch {
       return {};
     }
   },

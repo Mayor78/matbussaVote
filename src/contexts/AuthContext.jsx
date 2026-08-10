@@ -130,6 +130,35 @@ export const AuthProvider = ({ children }) => {
               votingStatus: foundStudent.votingStatus ?? foundStudent.voting_status ?? false,
               banned: foundStudent.banned || false,
             });
+
+            // Device binding for fresh student logins
+            if (freshLogin.current) {
+              try {
+                const [deviceSig, electionsData] = await Promise.all([
+                  generateDeviceSignature(),
+                  api.fetchElections('open').catch(() => []),
+                ]);
+                const electionId = Array.isArray(electionsData) && electionsData.length > 0 ? electionsData[0].id : '';
+
+                const check = await api.checkDevice(deviceSig, userEmail, electionId);
+                if (!check.allowed) {
+                  await auth.signOut();
+                  swal.error('Device Already in Use', check.reason + ' Contact your Electoral Committee if you need help.');
+                  setUser(null);
+                  setIsAdminUser(false);
+                  setAdminRole(null);
+                  setStudentData(null);
+                  navigate('/login');
+                  setLoading(false);
+                  return;
+                }
+
+                await api.bindDevice(deviceSig, foundStudent.id, userEmail, electionId);
+              } catch (e) {
+                if (import.meta.env.DEV) console.error('[Auth] Device binding failed:', e);
+                // Don't block login for device binding internal errors
+              }
+            }
           } else {
             setStudentData(null);
           }
@@ -189,23 +218,6 @@ export const AuthProvider = ({ children }) => {
 
       await signInWithEmailAndPassword(auth, email, password);
 
-      if (!isAdminLogin) {
-        try {
-          const deviceSig = await generateDeviceSignature();
-          const check = await api.checkDevice(deviceSig, email);
-
-          if (!check.allowed) {
-            await auth.signOut();
-            swal.error('Device Binding', check.reason);
-            throw new Error('Device already bound');
-          }
-
-          await api.bindDevice(deviceSig, '', email);
-        } catch (e) {
-          if (e.message === 'Device already bound') throw e;
-        }
-      }
-
       try { await rateLimitService.resetRateLimit(identifier); } catch { /* best-effort */ }
       
 
@@ -218,7 +230,7 @@ export const AuthProvider = ({ children }) => {
         loginFallbackRef.current = null;
       }, 4000);
     } catch (error) {
-      if (error.message === 'Student not found' || error.message === 'Not registered' || error.message === 'Device already bound') {
+      if (error.message === 'Student not found' || error.message === 'Not registered') {
         throw error;
       }
 

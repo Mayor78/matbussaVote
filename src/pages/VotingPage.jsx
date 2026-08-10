@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { auth } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, User, AlertCircle, ArrowLeft, Vote, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { getUserFriendlyError } from '../utils/errors';
-import { auditService } from '../services/auditService';
 import { CountdownBanner } from '../components/CountdownTimer';
 import * as api from '../lib/api';
 import swal from '../utils/swal';
+import { getLevelWindowStatus, LEVEL_GROUPS } from '../utils/electionValidation';
 import { startVotingTour } from '../utils/votingTour';
 
 function hashCode(str) {
@@ -74,7 +74,7 @@ const VotingPage = () => {
         api.buildBundle(electionId).catch(() => {});
       }
 
-      const { votes } = await api.checkVoteStatus(studentId, electionId);
+      const { votes } = await api.checkVoteStatus(electionId);
       const existing = {};
       (votes || []).forEach(v => { existing[v.positionId] = v.candidateId; });
 
@@ -196,15 +196,9 @@ const VotingPage = () => {
         candidateId,
         electionId: selectedElection.id,
         positionId,
-        studentId: student.id,
       });
 
       setMyVotes(prev => ({ ...prev, [positionId]: candidateId }));
-
-      auditService.logAction({
-        action: 'VOTE_CAST',
-        details: `Vote recorded: election="${selectedElection.id}", position="${positionId}"`,
-      }).catch(() => {});
 
       setVotingCandidateId(null);
 
@@ -236,6 +230,11 @@ const VotingPage = () => {
 
   const votedCount = positions.filter(p => myVotes[p.id] && myVotes[p.id] !== 'processing').length;
   const allVoted = positions.length > 0 && votedCount >= positions.length;
+
+  const levelWindow = selectedElection
+    ? getLevelWindowStatus(selectedElection, studentData?.level)
+    : null;
+  const votingBlocked = levelWindow && levelWindow.status !== 'open';
 
   if (loading) {
     return (
@@ -330,6 +329,26 @@ const VotingPage = () => {
             </div>
 
             {selectedElection.closesAt && <CountdownBanner closesAt={selectedElection.closesAt} />}
+
+            {levelWindow && levelWindow.status !== 'open' && (
+              <div className={`rounded-2xl p-5 text-center border ${
+                levelWindow.status === 'pending'
+                  ? 'bg-amber-50 border-amber-200'
+                  : levelWindow.status === 'closed'
+                  ? 'bg-red-50 border-red-200'
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <Clock className={`w-6 h-6 mx-auto mb-2 ${
+                  levelWindow.status === 'pending' ? 'text-amber-600' : levelWindow.status === 'closed' ? 'text-red-500' : 'text-gray-500'
+                }`} />
+                <h3 className={`text-base font-extrabold mb-1 ${
+                  levelWindow.status === 'pending' ? 'text-amber-900' : levelWindow.status === 'closed' ? 'text-red-800' : 'text-gray-800'
+                }`}>{levelWindow.title}</h3>
+                <p className={`text-sm leading-relaxed ${
+                  levelWindow.status === 'pending' ? 'text-amber-700' : levelWindow.status === 'closed' ? 'text-red-600' : 'text-gray-600'
+                }`}>{levelWindow.message}</p>
+              </div>
+            )}
 
             <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm px-4 py-4" id="voting-progress-section">
               <div className="flex items-center justify-between mb-3">
@@ -513,8 +532,8 @@ const VotingPage = () => {
                               return (
                                 <button
                                   key={candidate.id}
-                                  onClick={() => !voting && setPendingConfirm({ positionId: position.id, candidate })}
-                                  disabled={voting}
+                                  onClick={() => !voting && !votingBlocked && setPendingConfirm({ positionId: position.id, candidate })}
+                                  disabled={voting || votingBlocked}
                                   className={`carousel-card relative flex-shrink-0 w-[220px] sm:w-[240px] bg-white rounded-2xl border-2 p-4 sm:p-5 text-left transition-all duration-200 disabled:opacity-60 ${
                                     isVoting
                                       ? 'border-[#1F7A54] bg-[#EAF6EF] animate-vote-pulse'

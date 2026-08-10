@@ -10,8 +10,8 @@ export const useElections = () => {
   const { data: elections = [], isLoading, error } = useQuery({
     queryKey: ['elections'],
     queryFn: api.fetchElections,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

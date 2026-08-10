@@ -127,8 +127,8 @@ export async function castVote(data) {
   return request('/votes', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function checkVoteStatus(studentId, electionId) {
-  return request(`/votes/check?studentId=${studentId}&electionId=${electionId}`);
+export async function checkVoteStatus(electionId) {
+  return request(`/votes/check?electionId=${electionId}`);
 }
 
 // ── Students ──
@@ -159,12 +159,20 @@ export async function unbanStudent(id) {
 
 // ── Device Binding ──
 
-export async function checkDevice(deviceSignature, studentEmail) {
-  return request('/device/check', { method: 'POST', body: JSON.stringify({ deviceSignature, studentEmail }) });
+export async function checkDevice(deviceSignature, studentEmail, electionId) {
+  return request('/device/check', { method: 'POST', body: JSON.stringify({ deviceSignature, studentEmail, electionId }) });
 }
 
-export async function bindDevice(deviceSignature, studentId, studentEmail) {
-  return request('/device/bind', { method: 'POST', body: JSON.stringify({ deviceSignature, studentId, studentEmail }) });
+export async function bindDevice(deviceSignature, studentId, studentEmail, electionId) {
+  return request('/device/bind', { method: 'POST', body: JSON.stringify({ deviceSignature, studentId, studentEmail, electionId }) });
+}
+
+export async function resetDeviceBinding(deviceSignature, electionId) {
+  return request('/device/reset', { method: 'POST', body: JSON.stringify({ deviceSignature, electionId }) });
+}
+
+export async function resetDeviceByStudent(studentEmail, electionId) {
+  return request('/device/reset-by-student', { method: 'POST', body: JSON.stringify({ studentEmail, electionId }) });
 }
 
 // ── Stats ──

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, getCountFromServer, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import swal from '../utils/swal';
@@ -9,53 +7,11 @@ import { Users, Vote, TrendingUp, UserCheck, Plus, Play, Square, Eye } from 'luc
 import AuthCodeModal from '../components/AuthCodeModal';
 import { electionSchema } from '../utils/schemas';
 import { getUserFriendlyError } from '../utils/errors';
-import { bundleService } from '../services/electionBundleService';
+import * as api from '../lib/api';
 
-const fetchStats = async () => {
-  const [totalStudentsCount, registeredCount, votesCount, activeCount, positionsCount, candidatesCount] = await Promise.all([
-    getCountFromServer(collection(db, 'students')),
-    getCountFromServer(query(collection(db, 'students'), where('registeredStatus', '==', true))),
-    getCountFromServer(collection(db, 'votes')),
-    getCountFromServer(query(collection(db, 'elections'), where('status', '==', 'open'))),
-    getCountFromServer(collection(db, 'positions')),
-    getCountFromServer(collection(db, 'candidates')),
-  ]);
-
-  const totalStudents = totalStudentsCount.data().count;
-  const registeredStudents = registeredCount.data().count;
-  const totalVotes = votesCount.data().count;
-  const activeElections = activeCount.data().count;
-  const totalPositions = positionsCount.data().count;
-  const totalCandidates = candidatesCount.data().count;
-  const turnout = registeredStudents > 0 && totalPositions > 0
-    ? ((totalVotes / (registeredStudents * Math.max(totalPositions, 1))) * 100).toFixed(1)
-    : 0;
-
-  return { totalStudents, registeredStudents, totalVotesCast: totalVotes, activeElections, totalPositions, totalCandidates, turnoutPercentage: turnout };
-};
-
-const fetchElections = async () => {
-  const snapshot = await getDocs(query(collection(db, 'elections')));
-  const elections = await Promise.all(
-    snapshot.docs.map(async (d) => {
-      const data = d.data();
-      const eid = d.id;
-      const [posCount, candCount, voteCount] = await Promise.all([
-        getCountFromServer(query(collection(db, 'positions'), where('electionId', '==', eid))),
-        getCountFromServer(query(collection(db, 'candidates'), where('electionId', '==', eid))),
-        getCountFromServer(query(collection(db, 'votes'), where('electionId', '==', eid))),
-      ]);
-      return {
-        id: eid, ...data,
-        positionsCount: posCount.data().count,
-        candidatesCount: candCount.data().count,
-        votesCount: voteCount.data().count,
-      };
-    })
-  );
-
-  elections.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  return elections;
+const fetchDashboard = async () => {
+  const stats = await api.fetchStats();
+  return stats;
 };
 
 const StatCard = ({ title, value, icon: Icon, color }) => (
@@ -90,30 +46,22 @@ const AdminDashboard = () => {
     defaultValues: { title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 },
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['adminStats'],
-    queryFn: fetchStats,
+  const { data: dashboard, isLoading } = useQuery({
+    queryKey: ['adminDashboard'],
+    queryFn: fetchDashboard,
     refetchInterval: 120000,
+    staleTime: 60000,
   });
 
-  const { data: elections = [], isLoading: electionsLoading } = useQuery({
-    queryKey: ['adminElections'],
-    queryFn: fetchElections,
-    refetchInterval: 120000,
-  });
+  const elections = dashboard?.elections || [];
 
   const statusMutation = useMutation({
-    mutationFn: async ({ electionId, action }) => {
-      const ref = doc(db, 'elections', electionId);
-      const status = action === 'activate' ? 'open' : 'closed';
-      await updateDoc(ref, { status, updatedAt: new Date().toISOString() });
-      return { electionId, status };
-    },
+    mutationFn: ({ electionId, status }) => api.updateElectionStatus(electionId, status),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['adminElections'] });
-      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['elections'] });
       if (result.status === 'open') {
-        bundleService.buildBundle(result.electionId).catch(() => {});
+        api.buildBundle(result.id).catch(() => {});
       }
       swal.success('Success', `Election ${result.status}!`);
     },
@@ -123,31 +71,29 @@ const AdminDashboard = () => {
   useEffect(() => {
     const checkExpired = async () => {
       try {
-        const openSnap = await getDocs(query(collection(db, 'elections'), where('status', '==', 'open')));
-        const now = Date.now();
-        for (const d of openSnap.docs) {
-          const data = d.data();
-          if (data.closesAt && now > new Date(data.closesAt).getTime()) {
-            await updateDoc(doc(db, 'elections', d.id), {
-              status: 'closed',
-              updatedAt: new Date().toISOString(),
-            });
-            queryClient.invalidateQueries({ queryKey: ['adminElections'] });
-            queryClient.invalidateQueries({ queryKey: ['adminStats'] });
-            console.log(`[AutoClose] Election ${d.id} auto-closed`);
-          }
+        const openElections = elections.filter((e) => e.status === 'open');
+        if (openElections.length === 0) return;
+
+        for (const election of openElections) {
+          try {
+            const full = await api.fetchElection(election.id);
+            if (full.closesAt && Date.now() > new Date(full.closesAt).getTime()) {
+              await api.updateElectionStatus(election.id, 'closed');
+              queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+              queryClient.invalidateQueries({ queryKey: ['elections'] });
+            }
+          } catch { /* per-election close is best-effort */ }
         }
       } catch { /* auto-close is best-effort */ }
     };
 
-    const interval = setInterval(checkExpired, 30000);
-    checkExpired();
+    const interval = setInterval(checkExpired, 60000);
     return () => clearInterval(interval);
-  }, [queryClient]);
+  }, [elections, queryClient]);
 
   const handleElectionAction = (electionId, action) => {
     if (action === 'activate') {
-      statusMutation.mutate({ electionId, action });
+      statusMutation.mutate({ electionId, status: 'open' });
     } else {
       setAuthAction('CLOSE_ELECTION');
       setPendingElectionId(electionId);
@@ -167,23 +113,19 @@ const AdminDashboard = () => {
 
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'elections'), {
+      const created = await api.createElection({
         title: result.data.title,
         description: result.data.description,
         academicSession: result.data.academicSession,
         startDate: result.data.startDate,
         endDate: result.data.endDate,
         durationHours: result.data.durationHours || 24,
-        closesAt: null,
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
-      swal.success('Success', 'Election created!');
+      swal.success('Success', `Election "${created.title}" created!`);
       setShowCreateModal(false);
       reset({ title: '', description: '', academicSession: '', startDate: '', endDate: '', durationHours: 24 });
-      queryClient.invalidateQueries({ queryKey: ['adminElections'] });
-      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['elections'] });
     } catch (error) {
       swal.error('Error', getUserFriendlyError(error));
     } finally {
@@ -191,7 +133,7 @@ const AdminDashboard = () => {
     }
   };
 
-  if (statsLoading || electionsLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
@@ -212,10 +154,10 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard title="Total Students" value={stats?.totalStudents || 0} icon={Users} color="blue" />
-        <StatCard title="Registered Voters" value={stats?.registeredStudents || 0} icon={UserCheck} color="green" />
-        <StatCard title="Votes Cast" value={stats?.totalVotesCast || 0} icon={Vote} color="purple" />
-        <StatCard title="Turnout Rate" value={`${stats?.turnoutPercentage || 0}%`} icon={TrendingUp} color="orange" />
+        <StatCard title="Total Students" value={dashboard?.totalStudents || 0} icon={Users} color="blue" />
+        <StatCard title="Registered Voters" value={dashboard?.registeredVoters || 0} icon={UserCheck} color="green" />
+        <StatCard title="Votes Cast" value={dashboard?.totalVotesCast || 0} icon={Vote} color="purple" />
+        <StatCard title="Turnout Rate" value={`${dashboard?.turnout || 0}%`} icon={TrendingUp} color="orange" />
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -242,15 +184,15 @@ const AdminDashboard = () => {
                     <div className="font-medium text-gray-900 text-sm">{election.title}</div>
                     <div className="text-xs text-gray-500 truncate max-w-[150px]">{election.description}</div>
                   </td>
-                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.academicSession || election.academic_session}</td>
+                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.academicSession}</td>
                   <td className="px-4 sm:px-6 py-3">
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${statusColors[election.status] || ''}`}>
                       {election.status?.toUpperCase()}
                     </span>
                   </td>
-                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.positionsCount || 0}</td>
-                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.candidatesCount || 0}</td>
-                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.votesCount || 0}</td>
+                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.positionCount || 0}</td>
+                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.candidateCount || 0}</td>
+                  <td className="px-4 sm:px-6 py-3 text-xs text-gray-600">{election.voteCount || 0}</td>
                   <td className="px-4 sm:px-6 py-3">
                     <div className="flex gap-1">
                       {election.status === 'draft' && (
@@ -325,7 +267,7 @@ const AdminDashboard = () => {
         action={authAction}
         onAuthorized={() => {
           if (pendingElectionId) {
-            statusMutation.mutate({ electionId: pendingElectionId, action: 'close' });
+            statusMutation.mutate({ electionId: pendingElectionId, status: 'closed' });
             setPendingElectionId(null);
           }
         }}

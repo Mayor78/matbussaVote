@@ -1,9 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { electionService } from '../../services/electionService';
-import { validateElectionReady } from '../../utils/electionValidation';
+import { Calendar, Clock } from 'lucide-react';
 import { AlertCircle, CheckCircle, Play, Square, Eye, RotateCcw, Undo2 } from 'lucide-react';
 import AuthCodeModal from '../AuthCodeModal';
 import swal from '../../utils/swal';
+
+function validateElectionFromProps(positions, candidates) {
+  const errors = [];
+  if (!positions || positions.length === 0) {
+    errors.push('The election must have at least one position.');
+  }
+  for (const position of positions) {
+    const hasCandidate = candidates.some((c) => c.positionId === position.id);
+    if (!hasCandidate) {
+      errors.push(`Position "${position.title}" must have at least one candidate.`);
+    }
+  }
+  return { isValid: errors.length === 0, errors };
+}
 
 export const ElectionSettings = ({ election, positions = [], candidates = [], onUpdate }) => {
   const [loading, setLoading] = useState(false);
@@ -12,10 +26,50 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
   const [authAction, setAuthAction] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
 
+  const existing = election?.levelWindows;
+  const levelWindows = useMemo(() => {
+    if (existing && Array.isArray(existing)) return existing;
+    return [
+      { levels: ['ND1', 'ND2'], opensAt: '', closesAt: '' },
+      { levels: ['HND1', 'HND2'], opensAt: '', closesAt: '' },
+    ];
+  }, [existing]);
+
+  const [groupAOpens, setGroupAOpens] = useState(
+    (levelWindows[0]?.opensAt || '').substring(0, 16),
+  );
+  const [groupACloses, setGroupACloses] = useState(
+    (levelWindows[0]?.closesAt || '').substring(0, 16),
+  );
+  const [groupBOpens, setGroupBOpens] = useState(
+    (levelWindows[1]?.opensAt || '').substring(0, 16),
+  );
+  const [groupBCloses, setGroupBCloses] = useState(
+    (levelWindows[1]?.closesAt || '').substring(0, 16),
+  );
+
+  const handleSaveLevelWindows = async () => {
+    setLoading(true);
+    try {
+      await electionService.updateElection(election.id, {
+        levelWindows: [
+          { levels: ['ND1', 'ND2'], opensAt: groupAOpens ? new Date(groupAOpens).toISOString() : '', closesAt: groupACloses ? new Date(groupACloses).toISOString() : '' },
+          { levels: ['HND1', 'HND2'], opensAt: groupBOpens ? new Date(groupBOpens).toISOString() : '', closesAt: groupBCloses ? new Date(groupBCloses).toISOString() : '' },
+        ],
+      });
+      swal.success('Saved', 'Level voting windows updated.');
+      onUpdate();
+    } catch (error) {
+      swal.error('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleValidateAndPublish = async () => {
     setLoading(true);
     try {
-      const validation = await validateElectionReady(election.id);
+      const validation = validateElectionFromProps(positions, candidates);
       if (!validation.isValid) {
         setValidationErrors(validation.errors);
         swal.error('Error', 'Cannot publish: Please fix the issues below');
@@ -150,6 +204,68 @@ export const ElectionSettings = ({ election, positions = [], candidates = [], on
             <RotateCcw className="w-4 h-4" /> {loading ? 'Processing...' : 'Reopen for Voting (Code Required)'}
           </button>
         )}
+
+        <div className="border-t pt-3 mt-3">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-gray-500" /> Level Voting Windows
+          </h3>
+          <div className="space-y-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-amber-800 mb-2">Group A — ND1 &amp; ND2</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-500 font-semibold uppercase">Opens At</label>
+                  <input
+                    type="datetime-local"
+                    value={groupAOpens}
+                    onChange={(e) => setGroupAOpens(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-amber-300 rounded text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 font-semibold uppercase">Closes At</label>
+                  <input
+                    type="datetime-local"
+                    value={groupACloses}
+                    onChange={(e) => setGroupACloses(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-amber-300 rounded text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-blue-800 mb-2">Group B — HND1 &amp; HND2</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-500 font-semibold uppercase">Opens At</label>
+                  <input
+                    type="datetime-local"
+                    value={groupBOpens}
+                    onChange={(e) => setGroupBOpens(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-blue-300 rounded text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 font-semibold uppercase">Closes At</label>
+                  <input
+                    type="datetime-local"
+                    value={groupBCloses}
+                    onChange={(e) => setGroupBCloses(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-blue-300 rounded text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleSaveLevelWindows}
+              disabled={loading}
+              className="w-full py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-200 disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : 'Save Level Windows'}
+            </button>
+            <p className="text-[10px] text-gray-400 text-center">Leave empty to allow voting anytime for that group.</p>
+          </div>
+        </div>
 
         {status === 'draft' && (
           <div className="border-t pt-3">

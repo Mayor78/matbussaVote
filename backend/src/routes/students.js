@@ -84,6 +84,7 @@ router.post('/', requireAdmin, async (req, res) => {
       updatedAt: now,
     };
     const ref = await db().collection('students').add(doc);
+    invalidate('public:students:list');
     res.status(201).json({ id: ref.id, ...doc });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -95,6 +96,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
     const update = { ...req.body, updatedAt: new Date().toISOString() };
     delete update.id;
     await db().collection('students').doc(req.params.id).update(update);
+    invalidate('public:students:list');
     res.json({ id: req.params.id, ...update });
   } catch (err) {
     res.status(500).json({ error: err.message });

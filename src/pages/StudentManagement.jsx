@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import swal from '../utils/swal';
-import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight, Trash, Ban, ShieldOff } from 'lucide-react';
+import { Users, UserCheck, UserMinus, Search, Trash2, Edit2, Plus, Upload, Inbox, ChevronLeft, ChevronRight, Trash, Ban, ShieldOff, MonitorX } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { auditService } from '../services/auditService';
 import * as api from '../lib/api';
@@ -252,6 +252,25 @@ export const StudentManagement = () => {
     requireCode('UNBAN_STUDENT', () => unbanMutation.mutateAsync(id));
   };
 
+  const handleResetDevice = async (studentEmail, fullName) => {
+    if (!studentEmail) {
+      swal.error('No Email', 'This student has no email on file. Device binding cannot be reset.');
+      return;
+    }
+    const result = await swal.confirm(
+      'Reset Device Binding?',
+      `This will allow ${fullName || 'the student'} to log in from a different device. Continue?`,
+    );
+    if (!result.isConfirmed) return;
+
+    try {
+      const result = await api.resetDeviceByStudent(studentEmail);
+      swal.success('Done', result.message || 'Device binding reset.');
+    } catch (err) {
+      swal.error('Error', getUserFriendlyError(err));
+    }
+  };
+
   const openAddModal = () => {
     setEditingStudent(null);
     reset({ fullName: '', matricNumber: '', level: 'ND1' });
@@ -338,6 +357,7 @@ export const StudentManagement = () => {
                         ) : (
                           <button onClick={() => handleBan(s.id)} className="p-1.5 text-orange-600 hover:text-orange-800" title="Ban student"><Ban className="w-3.5 h-3.5" /></button>
                         )}
+                        <button onClick={() => handleResetDevice(s.email, s.fullName)} className="p-1.5 text-purple-600 hover:text-purple-800" title="Reset device binding"><MonitorX className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleDeleteRequest(s.id, s.fullName)} className="p-1.5 text-red-600 hover:text-red-800"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div></td>
                     </tr>

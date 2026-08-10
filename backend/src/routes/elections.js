@@ -51,6 +51,7 @@ router.post('/', requireAdmin, async (req, res) => {
       endDate: req.body.endDate || '',
       durationHours: req.body.durationHours || 24,
       closesAt: null,
+      levelWindows: req.body.levelWindows || null,
       status: 'draft',
       createdAt: now,
       updatedAt: now,

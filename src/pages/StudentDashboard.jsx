@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import * as api from '../lib/api';
 import VotingGuide from '../components/VotingGuide';
+import { getLevelWindowStatus, LEVEL_GROUPS } from '../utils/electionValidation';
 
 // Counts up from 0 to `value` once on mount/whenever value changes.
 // Used for vote counts and summary stats so the results reveal feels alive
@@ -53,7 +54,7 @@ const StudentDashboard = () => {
         const posData = await api.fetchPositions(el.id);
         const total = posData.length;
 
-        const { votes } = await api.checkVoteStatus(studentId, el.id);
+        const { votes } = await api.checkVoteStatus(el.id);
         setProgress({ voted: votes.length, total });
         return;
       }
@@ -65,14 +66,20 @@ const StudentDashboard = () => {
       const el = closedElections[0];
       setElection(el);
 
-      const [posData, candData, voteRes, stats] = await Promise.all([
-        api.fetchPositions(el.id),
-        api.fetchCandidates({ electionId: el.id }),
-        api.checkVoteStatus(studentId, el.id),
+      const [bundle, voteRes, stats] = await Promise.all([
+        api.fetchBundle(el.id),
+        api.checkVoteStatus(el.id),
         api.fetchStats(el.id),
       ]);
 
-      const positions = [...posData].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      const positions = (bundle && Array.isArray(bundle))
+        ? bundle.map(p => ({ id: p.id, title: p.title, description: p.description, displayOrder: p.displayOrder }))
+        : [];
+      positions.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+
+      const candData = (bundle && Array.isArray(bundle))
+        ? bundle.flatMap(p => (p.candidates || []).map(c => ({ ...c, positionId: p.id })))
+        : [];
 
       const myVotes = {};
       (voteRes.votes || []).forEach(v => { myVotes[v.positionId] = v.candidateId; });
@@ -170,6 +177,10 @@ const StudentDashboard = () => {
   const hasStarted = progress.voted > 0;
   const pct = progress.total > 0 ? Math.round((progress.voted / progress.total) * 100) : 0;
   const isResults = results && results.length > 0;
+  const levelWindow = election && !isResults
+    ? getLevelWindowStatus(election, student?.level)
+    : null;
+  const votingBlocked = levelWindow && levelWindow.status !== 'open';
 
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
@@ -220,6 +231,26 @@ const StudentDashboard = () => {
               )}
             </div>
 
+            {levelWindow && levelWindow.status !== 'open' && (
+              <div className={`rounded-2xl p-4 text-center border ${
+                levelWindow.status === 'pending'
+                  ? 'bg-amber-50 border-amber-200'
+                  : levelWindow.status === 'closed'
+                  ? 'bg-red-50 border-red-200'
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <Clock className={`w-5 h-5 mx-auto mb-1.5 ${
+                  levelWindow.status === 'pending' ? 'text-amber-600' : levelWindow.status === 'closed' ? 'text-red-500' : 'text-gray-500'
+                }`} />
+                <h3 className={`text-sm font-extrabold mb-1 ${
+                  levelWindow.status === 'pending' ? 'text-amber-900' : levelWindow.status === 'closed' ? 'text-red-800' : 'text-gray-800'
+                }`}>{levelWindow.title}</h3>
+                <p className={`text-xs leading-relaxed ${
+                  levelWindow.status === 'pending' ? 'text-amber-700' : levelWindow.status === 'closed' ? 'text-red-600' : 'text-gray-600'
+                }`}>{levelWindow.message}</p>
+              </div>
+            )}
+
             {progress.total > 0 && (
               <div className="bg-white rounded-2xl border border-[#E2E5EA] shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -246,6 +277,13 @@ const StudentDashboard = () => {
                 <h3 className="text-lg font-extrabold text-[#155C40] mb-1">Voting complete</h3>
                 <p className="text-[#2F855A] text-sm font-medium">Thank you for taking part!</p>
               </div>
+            ) : votingBlocked ? (
+              <button
+                disabled
+                className="w-full py-5 bg-gray-300 text-gray-500 rounded-2xl text-xl font-bold cursor-not-allowed shadow-md"
+              >
+                {levelWindow.status === 'pending' ? 'Voting not open yet' : 'Voting closed'}
+              </button>
             ) : (
               <button
                 onClick={() => navigate('/student/vote')}
